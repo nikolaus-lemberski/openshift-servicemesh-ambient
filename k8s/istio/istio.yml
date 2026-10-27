@@ -4,10 +4,12 @@ metadata:
   name: default
 spec:
   namespace: istio-system
+  profile: ambient
   values:
+    # global:
+    #   nativeNftables: true  # required on RHEL 10 / RHCOS 10 nodes
     pilot:
       trustedZtunnelNamespace: ztunnel
-    profile: ambient
     meshConfig:
       discoverySelectors:
       - matchLabels:

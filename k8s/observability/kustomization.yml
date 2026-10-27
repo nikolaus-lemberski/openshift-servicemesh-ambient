@@ -10,7 +10,7 @@ resources:
 - perses-uiplugin.yml
 - perses-datasource.yml
 - perses-dashboards/istio-control-plane.yaml
-- perses-dashboards/istio-mesh.yaml
+- perses-dashboards/istio-mesh-dashboard.yaml
 - perses-dashboards/istio-performance.yaml
 - perses-dashboards/istio-workload-dashboard.yaml
 - perses-dashboards/istio-service-dashboard.yaml

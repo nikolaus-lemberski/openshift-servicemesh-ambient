@@ -88,15 +88,13 @@ wait_for_csv openshift-cluster-observability-operator cluster-observability-oper
 ok "All operators installed"
 
 # ----------------------------------------------------------------------------
-# Step 2: Gateway API CRDs (if not present)
+# Step 2: Gateway API CRDs (shipped with OpenShift 4.19+)
 # ----------------------------------------------------------------------------
-info "Step 2: Ensuring Gateway API CRDs are available ..."
+info "Step 2: Checking Gateway API CRDs ..."
 if oc get crd gateways.gateway.networking.k8s.io &>/dev/null; then
-  ok "Gateway API CRDs already present"
+  ok "Gateway API CRDs present"
 else
-  info "Installing Gateway API CRDs ..."
-  oc apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
-  ok "Gateway API CRDs installed"
+  fail "Gateway API CRDs not found. OpenShift Service Mesh 3.4 requires OpenShift 4.20 or later."
 fi
 
 # ----------------------------------------------------------------------------
@@ -160,6 +158,11 @@ wait_for_pods openshift-user-workload-monitoring 300
 info "Step 6: Installing observability stack (monitors, Perses, Kiali, OSSMConsole) ..."
 oc apply -k "${SCRIPT_DIR}/k8s/observability"
 wait_for_pods istio-system 300
+
+info "Configuring Kiali links to the Perses dashboards in the OpenShift console ..."
+CONSOLE_URL="https://$(oc get route console -n openshift-console -o jsonpath='{.spec.host}')"
+oc patch kiali kiali-user-workload-monitoring -n istio-system --type merge \
+  -p "{\"spec\":{\"external_services\":{\"perses\":{\"external_url\":\"${CONSOLE_URL}\"}}}}"
 ok "Observability stack installed"
 
 # ----------------------------------------------------------------------------
@@ -168,27 +171,41 @@ ok "Observability stack installed"
 info "Step 7: Setting up distributed tracing (TempoStack) ..."
 
 oc apply -f "${SCRIPT_DIR}/k8s/tracing/ns.yml"
-oc apply -f "${SCRIPT_DIR}/k8s/tracing/bucketclaim.yml"
 
-info "Waiting for bucket claim secret 'tempostorage' in tempostack namespace ..."
-elapsed=0
-while (( elapsed < 300 )); do
-  if oc get secret tempostorage -n tempostack &>/dev/null; then
-    break
+if oc get crd objectbucketclaims.objectbucket.io &>/dev/null; then
+  info "ODF found, creating bucket claim ..."
+  oc apply -f "${SCRIPT_DIR}/k8s/tracing/bucketclaim.yml"
+
+  info "Waiting for bucket claim secret 'tempostorage' in tempostack namespace ..."
+  elapsed=0
+  while (( elapsed < 300 )); do
+    if oc get secret tempostorage -n tempostack &>/dev/null; then
+      break
+    fi
+    sleep 10
+    elapsed=$((elapsed + 10))
+  done
+  if ! oc get secret tempostorage -n tempostack &>/dev/null; then
+    fail "Timed out waiting for bucket claim secret. Is ODF configured?"
   fi
-  sleep 10
-  elapsed=$((elapsed + 10))
-done
-if ! oc get secret tempostorage -n tempostack &>/dev/null; then
-  fail "Timed out waiting for bucket claim secret. Is ODF installed?"
-fi
-ok "Bucket claim secret available"
+  ok "Bucket claim secret available"
 
-export S3_ENDPOINT="http://s3.openshift-storage.svc"
-export AWS_ACCESS_KEY_ID
-AWS_ACCESS_KEY_ID=$(oc get secret tempostorage -n tempostack -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 --decode)
-export AWS_SECRET_ACCESS_KEY
-AWS_SECRET_ACCESS_KEY=$(oc get secret tempostorage -n tempostack -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 --decode)
+  export S3_ENDPOINT="http://s3.openshift-storage.svc"
+  export AWS_ACCESS_KEY_ID
+  AWS_ACCESS_KEY_ID=$(oc get secret tempostorage -n tempostack -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 --decode)
+  export AWS_SECRET_ACCESS_KEY
+  AWS_SECRET_ACCESS_KEY=$(oc get secret tempostorage -n tempostack -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 --decode)
+else
+  info "ODF not found, deploying SeaweedFS as S3 storage ..."
+  oc apply -f "${SCRIPT_DIR}/k8s/tracing/seaweedfs.yml"
+  oc -n seaweedfs wait --for=condition=complete job/create-bucket --timeout=300s || \
+    fail "Timed out waiting for the SeaweedFS bucket"
+  ok "SeaweedFS bucket available"
+
+  export S3_ENDPOINT="http://seaweedfs.seaweedfs.svc:8333"
+  export AWS_ACCESS_KEY_ID="tempostorage"
+  export AWS_SECRET_ACCESS_KEY="tempostorage"
+fi
 
 info "Creating TempoStack ..."
 envsubst < "${SCRIPT_DIR}/k8s/tracing/tempostack.yml" | oc apply -f -

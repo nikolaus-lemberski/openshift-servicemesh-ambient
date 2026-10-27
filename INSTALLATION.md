@@ -1,5 +1,7 @@
 # Service Mesh 3 Installation Guide
 
+Tested versions: **OpenShift 4.22** and **Red Hat OpenShift Service Mesh 3.4** (Istio 1.30, Kiali 2.27). OpenShift Service Mesh 3.4 needs OpenShift 4.20 or later.
+
 ## Architecture Overview
 
 ```mermaid
@@ -38,7 +40,7 @@ graph TD
     subgraph tracing["Distributed Tracing"]
         direction LR
         Telemetry["Telemetry CR"] --> OTel["OTel Collector"] --> Tempo["TempoStack"]
-        Tempo --> S3["ODF S3 Storage"]
+        Tempo --> S3["S3 Storage<br/>ODF or SeaweedFS"]
         Tempo --> TracingUI["Tracing UI Plugin"]
     end
 
@@ -53,10 +55,10 @@ graph TD
 > [!WARNING]
 > Use only if you do not want to learn how to setup and configure the required Service Mesh infrastructure but want to focus on **using** the mesh. 
 
-Make sure you are logged in to your **OpenShift cluster** as an **administrator** and your OpenShift has **ODF** installed and configured. If you do not have **ODF**, you can use MinIO. Instructions at the end of the page.
+Make sure you are logged in to your **OpenShift cluster** as an **administrator**. Tempo needs S3 object storage: the script uses **ODF** if it is installed, otherwise it deploys SeaweedFS (see the end of the page).
 
 > [!TIP]
-> For Red Hatters: use "Red Hat OpenShift Container Platform Cluster (Multi-Cloud)" from RHPD and select version 4.21, sno (single-node OpenShift) is sufficient.
+> For Red Hatters: use "Red Hat OpenShift Container Platform Cluster (Multi-Cloud)" from RHPD and select version 4.22, sno (single-node OpenShift) is sufficient.
 
 ```bash
 ./scripts/install.sh
@@ -80,11 +82,10 @@ oc apply -f k8s/operators/subscriptions.yml
  
 ## Install Istio
 
-Install the Kubernetes Gateway API if it's not available (< OpenShift 4.19):
+OpenShift ships the Kubernetes Gateway API CRDs (4.19 and later), so we don't have to install them. Check that they are available:
 
 ```bash
-oc get crd gateways.gateway.networking.k8s.io &> /dev/null || \
-  { oc apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml; }
+oc get crd gateways.gateway.networking.k8s.io
 ```
 
 Then we have to configure the OVN-Kubernetes Container Network Interface (CNI) for local gateway mode:
@@ -103,7 +104,10 @@ oc patch networks.operator.openshift.io cluster --type=merge -p '{
 }'
 ```
 
-This tells OVN-Kubernetes to route pod traffic to the outside world through the node’s host networking stack rather than through OVN’s distributed gateway routing.
+This tells OVN-Kubernetes to route pod traffic to the outside world through the node’s host networking stack rather than through OVN’s distributed gateway routing. Ambient mode needs this so that liveness and readiness probes keep working for workloads in the mesh.
+
+> [!NOTE]
+> OpenShift 4.22 runs RHCOS 9 nodes by default. If your cluster has RHEL 10 or RHCOS 10 nodes (Technology Preview in 4.22), uncomment `nativeNftables: true` in `k8s/istio/istio.yml`, `k8s/istio/istio-cni.yml` and `k8s/tracing/istio-update.yml` before you continue.
 
 Finally we install Istio, Istio-CNI and the ZTunnel for ambient mesh.
 
@@ -156,6 +160,12 @@ oc apply -k k8s/observability
 
 Perses dashboards are available in the OpenShift console under **Observe > Dashboards (Perses)**.
 
+Kiali links its metrics pages to the Perses dashboards in the OpenShift console. For that, Kiali needs the URL of your OpenShift console:
+
+```bash
+oc patch kiali kiali-user-workload-monitoring -n istio-system --type merge -p "{\"spec\":{\"external_services\":{\"perses\":{\"external_url\":\"https://$(oc get route console -n openshift-console -o jsonpath='{.spec.host}')\"}}}}"
+```
+
 You will have to login to OpenShift again when the console plugin is installed. The URL to Kiali you'll find with:
 
 ```bash
@@ -166,7 +176,7 @@ echo "https://$(oc get route -n istio-system kiali -o jsonpath='{.spec.host}')"
 
 ### Tempostack
 
-Prerequisite: **ODF is installed** on OpenShift. If not, please install or use MinIO as alternative (see instructions for MinIO at the bottom).
+Prerequisite: **ODF is installed** on OpenShift. If not, install SeaweedFS instead (see [SeaweedFS instead of ODF](#seaweedfs-instead-of-odf) at the bottom) and continue with creating the TempoStack.
 
 Create a bucket claim:
 
@@ -216,20 +226,24 @@ As a console plugin is installed you'll have to login again to your OpenShift co
 
 You've installed all operators and setup Service Mesh. Now move on to [Using the Mesh](USING_THE_MESH.md).
 
-## MinIO instead of ODF
+## SeaweedFS instead of ODF
 
-If you do not have ODF and don't want to install and configure it, you can use Minio as an alternative. This setup is **not for production use**!
+If you do not have ODF and don't want to install and configure it, you can use [SeaweedFS](https://github.com/seaweedfs/seaweedfs) as an S3 compatible alternative. This setup is **not for production use**!
 
 ```bash
-oc create -f k8s/tracing/minio.yml
+oc apply -f k8s/tracing/seaweedfs.yml
 ```
 
-Check the Route for your MinIO installation and open the console route in your browser. Login with minioadmin / minioadmin, create a bucket and an API key. For simplicity reasons create a bucket "tempostorage" and an access key "tempostorage" with secret key "tempostorage". Again, do not do that for production workloads.
+This deploys SeaweedFS in the namespace `seaweedfs` with an S3 access key "tempostorage" and secret key "tempostorage", and runs a Job that creates the bucket "tempostorage". Again, do not do that for production workloads. Wait until the bucket is created:
+
+```bash
+oc -n seaweedfs wait --for=condition=complete job/create-bucket --timeout=300s
+```
 
 Then set the environment variables
 
 ```bash
-export S3_ENDPOINT="http://minio.minio.svc:9000"
+export S3_ENDPOINT="http://seaweedfs.seaweedfs.svc:8333"
 export AWS_ACCESS_KEY_ID="tempostorage"
 export AWS_SECRET_ACCESS_KEY="tempostorage"
 ```

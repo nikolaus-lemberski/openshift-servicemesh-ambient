@@ -18,9 +18,12 @@ spec:
     logger:
       log_level: info
   external_services:
+    grafana:
+      enabled: false
     perses:
       enabled: true
       url_format: openshift
+      # external_url (the OpenShift console URL) is cluster specific and set with "oc patch", see INSTALLATION.md
       project: perses-dev
       is_core: false
       auth:

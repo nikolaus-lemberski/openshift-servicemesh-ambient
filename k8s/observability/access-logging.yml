@@ -1,7 +1,9 @@
+# Istio uses only one mesh-wide Telemetry in the root namespace. k8s/tracing/telemetry.yml
+# updates this resource and adds tracing.
 apiVersion: telemetry.istio.io/v1
 kind: Telemetry
 metadata:
-  name: enable-access-logging
+  name: mesh-default
   namespace: istio-system
 spec:
   accessLogging:

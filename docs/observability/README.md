@@ -51,7 +51,7 @@ flowchart LR
 
 ## 2. Distributed Tracing (Tempo + OpenTelemetry Collector)
 
-Distributed tracing captures end-to-end request paths across services A -> B -> C. Istio is configured with `enableTracing: true` and an OpenTelemetry extension provider pointing to the OTel Collector. The waypoint proxy generates trace spans for each L7 request and exports them via OTLP/gRPC (port 4317) to the OTel Collector in the `tempostack` namespace. The OTel Collector forwards traces via OTLP/HTTP to the TempoStack gateway (multi-tenant, tenant `dev`). TempoStack stores traces in S3-compatible object storage (MinIO/ODF). A `UIPlugin` of type `DistributedTracing` exposes traces in the OpenShift console. Sampling is set at 100% for the workshop.
+Distributed tracing captures end-to-end request paths across services A -> B -> C. Istio is configured with `enableTracing: true` and an OpenTelemetry extension provider pointing to the OTel Collector. The waypoint proxy generates trace spans for each L7 request and exports them via OTLP/gRPC (port 4317) to the OTel Collector in the `tempostack` namespace. The OTel Collector forwards traces via OTLP/HTTP to the TempoStack gateway (multi-tenant, tenant `dev`). TempoStack stores traces in S3-compatible object storage (ODF or SeaweedFS). A `UIPlugin` of type `DistributedTracing` exposes traces in the OpenShift console. Sampling is set at 100% for the workshop.
 
 > **Note:** Only the **waypoint proxy** (L7) generates trace spans. The ztunnel (L4) does not participate in distributed tracing since it operates below HTTP.
 
@@ -72,7 +72,7 @@ flowchart LR
         OTEL[OTel Collector<br/>receiver: OTLP/gRPC :4317]
         TEMPO_GW[TempoStack Gateway<br/>tenant: dev]
         TEMPO[TempoStack<br/>Compactor/Ingester/Querier]
-        S3[(S3 Storage<br/>MinIO/ODF)]
+        S3[(S3 Storage<br/>ODF/SeaweedFS)]
     end
 
     subgraph openshift-console

@@ -8,7 +8,7 @@ Three microservices form a call chain (A → B → C) to showcase Istio ambient 
 |---------|---------|-----------|
 | service-a | Python 3 | ASGI + uvicorn |
 | service-b | TypeScript | Node.js + Express |
-| service-c | Java 21 | Quarkus |
+| service-c | Java 25 | Quarkus |
 
 ## Topics Covered
 

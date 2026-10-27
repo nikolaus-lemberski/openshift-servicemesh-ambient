@@ -63,6 +63,7 @@ safe_delete clusterrolebinding tempostack-traces-writer
 safe_delete clusterrole tempostack-traces-writer
 safe_delete rolebinding view -n tempostack
 safe_delete objectbucketclaim tempostorage -n tempostack
+safe_delete_ns seaweedfs
 ok "Tracing resources removed"
 
 # ----------------------------------------------------------------------------

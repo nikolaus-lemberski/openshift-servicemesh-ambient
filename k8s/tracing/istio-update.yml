@@ -2,14 +2,15 @@ apiVersion: sailoperator.io/v1
 kind: Istio
 metadata:
   name: default
-  namespace: istio-system
 spec:
   namespace: istio-system
-  version: v1.28-latest
+  version: v1.30-latest
+  profile: ambient
   values:
+    # global:
+    #   nativeNftables: true  # required on RHEL 10 / RHCOS 10 nodes
     pilot:
       trustedZtunnelNamespace: ztunnel
-    profile: ambient
     meshConfig:
       enableTracing: true
       defaultProviders:

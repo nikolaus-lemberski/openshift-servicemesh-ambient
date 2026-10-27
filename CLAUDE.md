@@ -1,8 +1,3 @@
----
-description: Project mission, architecture and tech stack
-alwaysApply: true
----
-
 # Service Mesh 3 Ambient - Workshop Project
 
 ## Mission
@@ -33,7 +28,7 @@ service-c has two versions (v1, v2) and crash/repair endpoints for resilience de
 - Prometheus (OpenShift user workload monitoring) with ServiceMonitor/PodMonitor
 - Perses dashboards (via Cluster Observability Operator UIPlugin)
 - Kiali + OpenShift Service Mesh (OSSM) console plugin
-- Tempo (TempoStack with ODF S3) + OpenTelemetry Collector for distributed tracing
+- Tempo (TempoStack with ODF or SeaweedFS S3) + OpenTelemetry Collector for distributed tracing
 
 ## Key Directories
 

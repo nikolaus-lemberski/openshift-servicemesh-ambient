@@ -1,9 +1,14 @@
+# Istio uses only one mesh-wide Telemetry in the root namespace, so this updates the
+# Telemetry from k8s/observability/access-logging.yml and keeps access logging enabled.
 apiVersion: telemetry.istio.io/v1
 kind: Telemetry
 metadata:
-  name: mesh-tracing
+  name: mesh-default
   namespace: istio-system
 spec:
+  accessLogging:
+    - providers:
+      - name: envoy
   tracing:
     - providers:
         - name: otel

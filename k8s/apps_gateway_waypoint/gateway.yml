@@ -3,6 +3,10 @@ kind: Gateway
 metadata:
   name: apps-gateway
   namespace: servicemesh-apps
+  annotations:
+    # Istio creates the Service "apps-gateway-istio" for this Gateway. Use ClusterIP
+    # instead of the default LoadBalancer and expose it with an OpenShift Route.
+    networking.istio.io/service-type: ClusterIP
 spec:
   gatewayClassName: istio
   listeners:
@@ -13,29 +17,6 @@ spec:
       namespaces:
         from: All
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: apps-gateway
-  namespace: servicemesh-apps
-  labels:
-    gateway.networking.k8s.io/gateway-name: apps-gateway
-spec:
-  ports:
-    - name: status-port
-      protocol: TCP
-      appProtocol: tcp
-      port: 15021
-      targetPort: 15021
-    - name: http
-      protocol: TCP
-      appProtocol: http
-      port: 80
-      targetPort: 80
-  type: ClusterIP
-  selector:
-    gateway.networking.k8s.io/gateway-name: apps-gateway
----
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
@@ -44,10 +25,10 @@ metadata:
 spec:
   to:
     kind: Service
-    name: apps-gateway
+    name: apps-gateway-istio
     weight: 100
   port:
-    targetPort: http
+    targetPort: 80
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect

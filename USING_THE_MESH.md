@@ -84,7 +84,7 @@ In the OpenShift console UI, open
 Observe -> Metrics
 ```
 
-Select the *servicemesh-apps* namespace and enter the query `istio_tcp_connections_opened_total` and you can see that with the Thanos Querier we can access Istio metrics. At the moment we only have L4 metrics. Later we'll use a Waypoint proxy for L7 which exposes HTTP metrics like `istio_requests_total`.
+Enter the query `istio_tcp_connections_opened_total{destination_workload_namespace="servicemesh-apps"}` and you can see that with the Thanos Querier we can access Istio metrics. The L4 metrics are reported by the ztunnel, so they belong to the *ztunnel* namespace; the labels `source_workload_namespace` and `destination_workload_namespace` tell which workloads are talking to each other. At the moment we only have L4 metrics. Later we'll use a Waypoint proxy for L7 which exposes HTTP metrics like `istio_requests_total`.
 
 Metrics
 
@@ -223,7 +223,7 @@ HTTP metrics, access logging and tracing
 
 ### Ingress Gateway
 
-Create the Gateway and expose it via OpenShift Route. We delete our old Route as we're using the Gateway from now on.
+Create the Gateway and expose it via OpenShift Route. For every Gateway, Istio deploys a gateway proxy and creates a Service named `<gateway-name>-istio`. By default this Service is of type `LoadBalancer`; we annotate the Gateway with `networking.istio.io/service-type: ClusterIP` and point an OpenShift Route to the `apps-gateway-istio` Service instead, so the OpenShift router handles ingress (and TLS edge termination). We delete our old Route as we're using the Gateway from now on.
 
 ```bash
 oc apply -f k8s/apps_gateway_waypoint/gateway.yml
@@ -615,7 +615,7 @@ curl http://localhost:8080/
 kill %1
 ```
 
-The counter should have jumped up by 10 — proving v2 received copies of the live traffic even though no user-facing response ever came from v2.
+The counter should have jumped up by 11 (10 mirrored requests plus your own check) — proving v2 received copies of the live traffic even though no user-facing response ever came from v2.
 
 Traffic mirroring
 
