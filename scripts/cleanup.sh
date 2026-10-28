@@ -40,16 +40,33 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
 fi
 
 # ----------------------------------------------------------------------------
-# Step 1: UI Plugins (Distributed Tracing + Perses Monitoring)
+# Step 1: Keycloak
 # ----------------------------------------------------------------------------
-info "Step 1: Removing UI Plugins ..."
+info "Step 1: Removing Keycloak ..."
+oc delete -f "${SCRIPT_DIR}/k8s/istiofeatures/gateway-auth/3-authorization-policy-require-admin.yml" --ignore-not-found 2>/dev/null || true
+oc delete -f "${SCRIPT_DIR}/k8s/istiofeatures/gateway-auth/1-request-authentication.yml" --ignore-not-found 2>/dev/null || true
+safe_delete keycloakrealmimport servicemesh -n servicemesh-keycloak
+safe_delete keycloak keycloak -n servicemesh-keycloak
+oc wait --for=delete keycloak/keycloak -n servicemesh-keycloak --timeout=120s 2>/dev/null || true
+safe_delete subscription rhbk-operator -n servicemesh-keycloak
+for csv in $(oc get csv -n servicemesh-keycloak -o name 2>/dev/null | grep rhbk-operator || true); do
+  oc delete "$csv" -n servicemesh-keycloak --ignore-not-found 2>/dev/null || true
+  ok "Deleted ${csv} in servicemesh-keycloak"
+done
+safe_delete_ns servicemesh-keycloak
+ok "Keycloak removed"
+
+# ----------------------------------------------------------------------------
+# Step 2: UI Plugins (Distributed Tracing + Perses Monitoring)
+# ----------------------------------------------------------------------------
+info "Step 2: Removing UI Plugins ..."
 safe_delete uiplugin distributed-tracing
 safe_delete uiplugin monitoring
 
 # ----------------------------------------------------------------------------
-# Step 2: Tracing resources
+# Step 3: Tracing resources
 # ----------------------------------------------------------------------------
-info "Step 2: Removing tracing resources ..."
+info "Step 3: Removing tracing resources ..."
 oc delete -f "${SCRIPT_DIR}/k8s/tracing/istio-update.yml" --ignore-not-found 2>/dev/null || true
 oc delete -f "${SCRIPT_DIR}/k8s/tracing/telemetry.yml" --ignore-not-found 2>/dev/null || true
 oc delete -f "${SCRIPT_DIR}/k8s/tracing/networkpolicies.yml" --ignore-not-found 2>/dev/null || true
@@ -67,16 +84,16 @@ safe_delete_ns seaweedfs
 ok "Tracing resources removed"
 
 # ----------------------------------------------------------------------------
-# Step 3: Observability stack
+# Step 4: Observability stack
 # ----------------------------------------------------------------------------
-info "Step 3: Removing observability stack ..."
+info "Step 4: Removing observability stack ..."
 oc delete -k "${SCRIPT_DIR}/k8s/observability" --ignore-not-found 2>/dev/null || true
 ok "Observability resources removed"
 
 # ----------------------------------------------------------------------------
-# Step 4: Istio, IstioCNI, ZTunnel
+# Step 5: Istio, IstioCNI, ZTunnel
 # ----------------------------------------------------------------------------
-info "Step 4: Removing Istio, IstioCNI, and ZTunnel ..."
+info "Step 5: Removing Istio, IstioCNI, and ZTunnel ..."
 safe_delete ztunnel default
 safe_delete istiocni default
 safe_delete istio default
@@ -88,9 +105,9 @@ oc wait --for=delete ztunnel/default --timeout=120s 2>/dev/null || true
 ok "Istio components removed"
 
 # ----------------------------------------------------------------------------
-# Step 5: Operator subscriptions and CSVs
+# Step 6: Operator subscriptions and CSVs
 # ----------------------------------------------------------------------------
-info "Step 5: Removing operator subscriptions ..."
+info "Step 6: Removing operator subscriptions ..."
 safe_delete subscription kiali-ossm -n openshift-operators
 safe_delete subscription servicemeshoperator3 -n openshift-operators
 safe_delete subscription tempo-product -n openshift-tempo-operator
@@ -107,9 +124,9 @@ done
 ok "Operator subscriptions and CSVs removed"
 
 # ----------------------------------------------------------------------------
-# Step 6: Namespaces
+# Step 7: Namespaces
 # ----------------------------------------------------------------------------
-info "Step 6: Removing namespaces ..."
+info "Step 7: Removing namespaces ..."
 safe_delete_ns perses-dev
 safe_delete_ns tempostack
 safe_delete_ns istio-system
@@ -120,9 +137,9 @@ safe_delete_ns openshift-opentelemetry-operator
 safe_delete_ns openshift-cluster-observability-operator
 
 # ----------------------------------------------------------------------------
-# Step 7: Revert OVN-Kubernetes gateway config (optional)
+# Step 8: Revert OVN-Kubernetes gateway config (optional)
 # ----------------------------------------------------------------------------
-info "Step 7: Reverting OVN-Kubernetes local gateway mode ..."
+info "Step 8: Reverting OVN-Kubernetes local gateway mode ..."
 oc patch networks.operator.openshift.io cluster --type=json \
   -p='[{"op":"remove","path":"/spec/defaultNetwork/ovnKubernetesConfig/gatewayConfig/routingViaHost"}]' 2>/dev/null || \
   warn "Could not revert OVN-Kubernetes gateway config (may already be default)"

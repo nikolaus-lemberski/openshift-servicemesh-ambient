@@ -224,6 +224,47 @@ info "Step 8: Installing Distributed Tracing UI Plugin ..."
 oc apply -f "${SCRIPT_DIR}/k8s/tracing/uiplugin.yml"
 ok "UI Plugin installed"
 
+# ----------------------------------------------------------------------------
+# Step 9: Keycloak (OIDC identity provider for Gateway authentication)
+# ----------------------------------------------------------------------------
+info "Step 9: Installing Keycloak ..."
+oc apply -f "${SCRIPT_DIR}/k8s/keycloak/ns.yml"
+oc apply -f "${SCRIPT_DIR}/k8s/keycloak/subscription.yml"
+
+info "Waiting for Keycloak operator CSV to appear ..."
+elapsed=0
+until oc get csv -n servicemesh-keycloak -l operators.coreos.com/rhbk-operator.servicemesh-keycloak 2>/dev/null | grep -q rhbk-operator; do
+  (( elapsed >= 300 )) && fail "Timed out waiting for Keycloak operator CSV"
+  sleep 10
+  elapsed=$((elapsed + 10))
+done
+oc wait csv -n servicemesh-keycloak -l operators.coreos.com/rhbk-operator.servicemesh-keycloak \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=300s
+ok "Keycloak operator installed"
+
+# Reuse the existing database password on re-runs, the PVC keeps the old one
+if oc get secret keycloak-pgsql-user -n servicemesh-keycloak &>/dev/null; then
+  KEYCLOAK_DB_PASSWORD=$(oc get secret keycloak-pgsql-user -n servicemesh-keycloak -o jsonpath='{.data.password}' | base64 --decode)
+else
+  KEYCLOAK_DB_PASSWORD=$(openssl rand -hex 12)
+fi
+export KEYCLOAK_DB_PASSWORD
+
+info "Deploying PostgreSQL for Keycloak ..."
+envsubst < "${SCRIPT_DIR}/k8s/keycloak/postgres.yml" | oc apply -f -
+oc rollout status deployment/keycloak-pgsql -n servicemesh-keycloak --timeout=300s
+
+info "Deploying Keycloak ..."
+export KEYCLOAK_HOST="keycloak.$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')"
+envsubst < "${SCRIPT_DIR}/k8s/keycloak/keycloak.yml" | oc apply -f -
+oc wait keycloak/keycloak -n servicemesh-keycloak --for=condition=Ready --timeout=600s
+
+info "Importing realm 'servicemesh' (OIDC client + test users) ..."
+oc apply -f "${SCRIPT_DIR}/k8s/keycloak/keycloak-realm.yml"
+oc wait keycloakrealmimport/servicemesh -n servicemesh-keycloak \
+  --for=jsonpath='{.status.conditions[?(@.type=="Done")].status}'=True --timeout=300s
+ok "Keycloak ready"
+
 # ============================================================================
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -234,4 +275,7 @@ info "Perses dashboards available at: Observe > Dashboards (Perses) in the OpenS
 echo ""
 info "Kiali URL:"
 echo "  https://$(oc get route -n istio-system kiali -o jsonpath='{.spec.host}' 2>/dev/null || echo '<not yet available>')"
+echo ""
+info "Keycloak issuer URL:"
+echo "  https://${KEYCLOAK_HOST}/realms/servicemesh"
 echo ""

@@ -1,4 +1,4 @@
-# Service Mesh 3 Installation Guide
+# 1. Installation
 
 Tested versions: **OpenShift 4.22** and **Red Hat OpenShift Service Mesh 3.4** (Istio 1.30, Kiali 2.27). OpenShift Service Mesh 3.4 needs OpenShift 4.20 or later.
 
@@ -13,6 +13,7 @@ graph TD
         TempoOp["Tempo"]
         OTelOp["OpenTelemetry"]
         COO["Cluster Observability"]
+        RHBK["Keycloak"]
     end
 
     subgraph platform["Network"]
@@ -44,10 +45,16 @@ graph TD
         Tempo --> TracingUI["Tracing UI Plugin"]
     end
 
+    subgraph auth["Authentication"]
+        direction LR
+        Keycloak["Keycloak<br/>servicemesh-keycloak"] --> Postgres["PostgreSQL"]
+    end
+
     COO ~~~ OVN
     GWAPI ~~~ IstioCNI
     ZTunnel ~~~ Monitors
     AccessLog ~~~ Telemetry
+    TracingUI ~~~ Keycloak
 ```
 
 ## Install script (shortcut)
@@ -64,7 +71,9 @@ Make sure you are logged in to your **OpenShift cluster** as an **administrator*
 ./scripts/install.sh
 ```
 
-After the script has completed, move on to [Using the Mesh](USING_THE_MESH.md).
+Run the script (and all other commands of the workshop) from the root directory of this repository.
+
+After the script has completed, move on to [2. Deploy and Onboard the Apps](02-deploy-and-onboard.md).
 
 ## Install the operators
 
@@ -79,6 +88,8 @@ oc apply -f k8s/operators/subscriptions.yml
 * Tempo Operator
 * Red Hat build of OpenTelemetry
 * Cluster Observability Operator
+
+The Red Hat build of Keycloak operator is installed later in its own namespace, see [Keycloak](#keycloak-oidc-identity-provider).
  
 ## Install Istio
 
@@ -222,9 +233,79 @@ oc apply -f k8s/tracing/uiplugin.yml
 
 As a console plugin is installed you'll have to login again to your OpenShift console. In "Observe" is a new entry "Traces".
 
+## Keycloak (OIDC Identity Provider)
+
+For authentication and authorization of external users on the Gateway we need an OIDC identity provider that issues JWTs. We install the Red Hat build of Keycloak with a PostgreSQL database in the namespace `servicemesh-keycloak`.
+
+> [!NOTE]
+> Many workshop clusters (e.g. RHDP) already run a Keycloak in the namespace `keycloak` (`sso.<cluster-domain>`) for the OpenShift console login. We deliberately use a separate namespace and hostname so we don't interfere with it.
+
+Install the Keycloak operator:
+
+```bash
+oc apply -f k8s/keycloak/ns.yml
+oc apply -f k8s/keycloak/subscription.yml
+```
+
+Wait until the operator is installed:
+
+```bash
+until oc get csv -n servicemesh-keycloak -l operators.coreos.com/rhbk-operator.servicemesh-keycloak 2>/dev/null | grep -q rhbk-operator; do sleep 3; done
+oc wait csv -n servicemesh-keycloak -l operators.coreos.com/rhbk-operator.servicemesh-keycloak --for=jsonpath='{.status.phase}'=Succeeded --timeout=300s
+```
+
+Deploy PostgreSQL with a random password:
+
+```bash
+export KEYCLOAK_DB_PASSWORD=$(openssl rand -hex 12)
+envsubst < k8s/keycloak/postgres.yml | oc apply -f -
+oc rollout status deployment/keycloak-pgsql -n servicemesh-keycloak --timeout=180s
+```
+
+> [!WARNING]
+> If you re-run this step and the PVC `keycloak-pgsql-data` already exists, reuse the old password (`oc get secret keycloak-pgsql-user -n servicemesh-keycloak -o jsonpath='{.data.password}' | base64 --decode`) or delete the PVC and secret first. A new password with an existing database breaks Keycloak.
+
+Deploy Keycloak and its Route. The OpenShift router terminates TLS (edge) and Keycloak serves plain HTTP inside the cluster. The public URL `https://keycloak.<cluster-domain>` is used as the token issuer:
+
+```bash
+export KEYCLOAK_HOST="keycloak.$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')"
+envsubst < k8s/keycloak/keycloak.yml | oc apply -f -
+oc wait keycloak/keycloak -n servicemesh-keycloak --for=condition=Ready --timeout=300s
+```
+
+Import the realm `servicemesh` with the OIDC client and two test users:
+
+```bash
+oc apply -f k8s/keycloak/keycloak-realm.yml
+oc wait keycloakrealmimport/servicemesh -n servicemesh-keycloak --for=jsonpath='{.status.conditions[?(@.type=="Done")].status}'=True --timeout=300s
+```
+
+| Parameter     | Value                                                         |
+| ------------- | ------------------------------------------------------------- |
+| Issuer URL    | `https://keycloak.<cluster-domain>/realms/servicemesh`        |
+| Client ID     | `servicemesh-app`                                             |
+| Client secret | `servicemesh-app-secret`                                      |
+| Test user     | `testuser` / `testuser` (realm role: `user`)                  |
+| Admin user    | `adminuser` / `adminuser` (realm roles: `user`, `admin`)      |
+
+Verify that you can get a token:
+
+```bash
+curl -s -X POST "https://${KEYCLOAK_HOST}/realms/servicemesh/protocol/openid-connect/token" \
+  -d grant_type=password -d client_id=servicemesh-app -d client_secret=servicemesh-app-secret \
+  -d username=testuser -d password=testuser | jq -r .access_token
+```
+
+The Keycloak admin console is available at `https://${KEYCLOAK_HOST}/admin`, the initial admin credentials are stored in the secret `keycloak-initial-admin`:
+
+```bash
+oc get secret keycloak-initial-admin -n servicemesh-keycloak -o jsonpath='{.data.username}' | base64 --decode; echo
+oc get secret keycloak-initial-admin -n servicemesh-keycloak -o jsonpath='{.data.password}' | base64 --decode; echo
+```
+
 ## Congratulations, you're done!
 
-You've installed all operators and setup Service Mesh. Now move on to [Using the Mesh](USING_THE_MESH.md).
+You've installed all operators and setup Service Mesh. Now move on to [2. Deploy and Onboard the Apps](02-deploy-and-onboard.md).
 
 ## SeaweedFS instead of ODF
 
@@ -249,3 +330,7 @@ export AWS_SECRET_ACCESS_KEY="tempostorage"
 ```
 
 ...and continue with TempoStack (see section above).
+
+---
+
+[Overview](../README.md) | [2. Deploy and Onboard the Apps →](02-deploy-and-onboard.md)

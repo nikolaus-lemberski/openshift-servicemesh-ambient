@@ -23,7 +23,7 @@ spec:
     perses:
       enabled: true
       url_format: openshift
-      # external_url (the OpenShift console URL) is cluster specific and set with "oc patch", see INSTALLATION.md
+      # external_url (the OpenShift console URL) is cluster specific and set with "oc patch", see chapters/01-installation.md
       project: perses-dev
       is_core: false
       auth:

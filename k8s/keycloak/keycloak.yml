@@ -1,0 +1,47 @@
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: Keycloak
+metadata:
+  name: keycloak
+  namespace: servicemesh-keycloak
+spec:
+  instances: 1
+  hostname:
+    # Public URL, used as issuer ("iss" claim) in the tokens
+    hostname: https://${KEYCLOAK_HOST}
+    # Allow in-cluster requests (e.g. istiod fetching the JWKS) via the Service
+    backchannelDynamic: true
+  # TLS is terminated by the OpenShift router (edge), Keycloak serves plain HTTP
+  http:
+    httpEnabled: true
+  proxy:
+    headers: xforwarded
+  ingress:
+    enabled: false
+  db:
+    vendor: postgres
+    host: keycloak-pgsql
+    database: keycloak
+    usernameSecret:
+      name: keycloak-pgsql-user
+      key: user
+    passwordSecret:
+      name: keycloak-pgsql-user
+      key: password
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: keycloak
+  namespace: servicemesh-keycloak
+spec:
+  host: ${KEYCLOAK_HOST}
+  to:
+    kind: Service
+    name: keycloak-service
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

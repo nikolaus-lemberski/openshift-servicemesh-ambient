@@ -1,0 +1,15 @@
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: apps-gateway-jwt
+  namespace: servicemesh-apps
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: apps-gateway
+  jwtRules:
+  # Must match the "iss" claim of the Keycloak tokens (public URL)
+  - issuer: https://${KEYCLOAK_HOST}/realms/servicemesh
+    # istiod fetches the signing keys in-cluster from the Keycloak Service
+    jwksUri: http://keycloak-service.servicemesh-keycloak.svc:8080/realms/servicemesh/protocol/openid-connect/certs

@@ -12,11 +12,18 @@ Three microservices form a call chain (A → B → C) to showcase Istio ambient 
 
 ## Topics Covered
 
-- **Security** — automatic mTLS, authorization policies
+- **Security** — automatic mTLS, authorization policies, JWT authentication and authorization on the Gateway (Keycloak)
 - **Observability** — Prometheus metrics, Perses dashboards, Kiali, distributed tracing (Tempo + OpenTelemetry)
 - **Resilience** — circuit breakers, retries, canary releases, traffic mirroring
 
-## Getting Started
+## Chapters
 
-1. [Installation Guide](INSTALLATION.md) — install operators, Istio ambient mesh, and the observability/tracing stack
-2. [Using the Mesh](USING_THE_MESH.md) — deploy the demo apps, configure routing, and explore mesh features
+1. [Installation](chapters/01-installation.md) — install operators, Istio ambient mesh, the observability/tracing stack and Keycloak
+2. [Deploy and Onboard the Apps](chapters/02-deploy-and-onboard.md) — deploy the demo apps, add them to the ambient mesh and explore Kiali, metrics and dashboards
+3. [L4 Security](chapters/03-l4-security.md) — strict mTLS and identity-based authorization with the ztunnel
+4. [Gateway and Waypoint Proxy](chapters/04-gateway-and-waypoint.md) — ingress with the Gateway API and L7 features with a waypoint proxy
+5. [Distributed Tracing](chapters/05-distributed-tracing.md) — traces with Tempo and OpenTelemetry
+6. [Authentication and Authorization on the Gateway](chapters/06-gateway-auth.md) — JWT validation and role-based access with Keycloak
+7. [Canary Release](chapters/07-canary-release.md) — shift traffic gradually from v1 to v2
+8. [Circuit Breaker](chapters/08-circuit-breaker.md) — outlier detection and retries
+9. [Traffic Mirroring](chapters/09-traffic-mirroring.md) — send a copy of live traffic to a new version

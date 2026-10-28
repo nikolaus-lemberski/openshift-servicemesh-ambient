@@ -1,0 +1,19 @@
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: apps-gateway-authz
+  namespace: servicemesh-apps
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: apps-gateway
+  action: ALLOW
+  rules:
+  # Only requests with a valid JWT carrying the Keycloak realm role "admin" are allowed
+  - from:
+    - source:
+        requestPrincipals: ["*"]
+    when:
+    - key: request.auth.claims[realm_access][roles]
+      values: ["admin"]

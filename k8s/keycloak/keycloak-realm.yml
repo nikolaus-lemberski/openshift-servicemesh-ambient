@@ -1,0 +1,59 @@
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: KeycloakRealmImport
+metadata:
+  name: servicemesh
+  namespace: servicemesh-keycloak
+spec:
+  keycloakCRName: keycloak
+  realm:
+    realm: servicemesh
+    enabled: true
+    sslRequired: external
+    registrationAllowed: false
+    roles:
+      realm:
+      - name: user
+        description: Default user role
+      - name: admin
+        description: Administrator role
+    clients:
+    - clientId: servicemesh-app
+      enabled: true
+      protocol: openid-connect
+      publicClient: false
+      clientAuthenticatorType: client-secret
+      secret: servicemesh-app-secret
+      standardFlowEnabled: false
+      directAccessGrantsEnabled: true
+      serviceAccountsEnabled: false
+      defaultClientScopes:
+      - basic
+      - profile
+      - email
+      - roles
+    users:
+    - username: testuser
+      enabled: true
+      emailVerified: true
+      email: testuser@example.com
+      firstName: Test
+      lastName: User
+      realmRoles:
+      - user
+      credentials:
+      - type: password
+        value: testuser
+        temporary: false
+    - username: adminuser
+      enabled: true
+      emailVerified: true
+      email: adminuser@example.com
+      firstName: Admin
+      lastName: User
+      realmRoles:
+      - user
+      - admin
+      credentials:
+      - type: password
+        value: adminuser
+        temporary: false

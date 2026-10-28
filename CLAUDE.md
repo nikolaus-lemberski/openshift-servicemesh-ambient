@@ -33,6 +33,7 @@ service-c has two versions (v1, v2) and crash/repair endpoints for resilience de
 ## Key Directories
 
 - `apps/` — microservice source code (service-a, service-b, service-c) with Containerfiles
+- `chapters/` — the workshop instructions, one numbered Markdown file per chapter
 - `assets/img/` - images used in the instructions
 - `scripts/` — `install.sh` and `cleanup.sh` helper scripts
 - `k8s/istio/` — Istio, IstioCNI, ztunnel CRs (kustomize)
@@ -41,14 +42,15 @@ service-c has two versions (v1, v2) and crash/repair endpoints for resilience de
 - `k8s/observability/` — Kiali, OSSM console plugin, Perses dashboards/datasource, monitors, access logging (kustomize)
 - `k8s/tracing/` — TempoStack, OTel collector, telemetry, network policies, tracing UI plugin
 - `k8s/operators/` — operator subscriptions
-- `k8s/istiofeatures/` — canary, circuit-breaker, l4-authz, mirroring, mTLS demos
+- `k8s/keycloak/` — Red Hat build of Keycloak (operator, PostgreSQL, realm) as OIDC provider for Gateway auth
+- `k8s/istiofeatures/` — canary, circuit-breaker, gateway-auth (JWT AuthN/AuthZ), l4-authz, mirroring, mTLS demos
 
 ## Key Files
 
 - `apps/podman-compose.yml` — local dev compose (all three services)
 - `apps/tag-and-push.sh` — container image build and push helper
-- `INSTALLATION.md` — full installation guide (operators, Istio, observability, tracing)
-- `USING_THE_MESH.md` — workshop walkthrough (onboarding, L4 security, waypoint, canary, circuit breaker, mirroring)
+- `chapters/01-installation.md` — full installation guide (operators, Istio, observability, tracing, Keycloak)
+- `chapters/02-*.md` to `chapters/09-*.md` — workshop walkthrough, one numbered file per chapter (onboarding, L4 security, gateway/waypoint, tracing, gateway auth, canary, circuit breaker, mirroring)
 
 ## Conventions
 
@@ -60,3 +62,4 @@ service-c has two versions (v1, v2) and crash/repair endpoints for resilience de
 - Label `istio.io/use-waypoint=waypoint` for waypoint enrollment
 - Container images built with `podman build` using Containerfiles
 - Local dev via `podman-compose up --build` (from `apps/` directory)
+- Chapters: show the relevant part of each manifest as YAML snippet before applying it, explain the fields, state the expected result, end with cleanup and a previous/next navigation line; images are linked relative (`../assets/img/...`)

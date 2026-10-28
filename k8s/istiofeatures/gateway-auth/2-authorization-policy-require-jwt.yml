@@ -1,0 +1,16 @@
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: apps-gateway-authz
+  namespace: servicemesh-apps
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: apps-gateway
+  action: ALLOW
+  rules:
+  # Any request with a valid JWT (a request principal is set) is allowed
+  - from:
+    - source:
+        requestPrincipals: ["*"]
