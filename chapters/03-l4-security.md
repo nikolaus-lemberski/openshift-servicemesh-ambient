@@ -30,7 +30,7 @@ oc wait pod/curl-test -n servicemesh-apps --for=condition=Ready --timeout=60s
 ```
 
 > [!NOTE]
-> You may see a PodSecurity warning for the pod in `default`. The pod is created anyway.
+> You may see a PodSecurity warning for the pod in `servicemesh-apps`. The pod is created anyway.
 
 ## Strict mTLS
 

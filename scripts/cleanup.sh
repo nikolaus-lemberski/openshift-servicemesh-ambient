@@ -40,9 +40,18 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
 fi
 
 # ----------------------------------------------------------------------------
-# Step 1: Keycloak
+# Step 1: Workshop apps
 # ----------------------------------------------------------------------------
-info "Step 1: Removing Keycloak ..."
+info "Step 1: Removing workshop apps ..."
+safe_delete pod curl-test -n default
+safe_delete_ns servicemesh-apps
+oc wait --for=delete namespace/servicemesh-apps --timeout=180s 2>/dev/null || true
+ok "Workshop apps removed"
+
+# ----------------------------------------------------------------------------
+# Step 2: Keycloak
+# ----------------------------------------------------------------------------
+info "Step 2: Removing Keycloak ..."
 oc delete -f "${SCRIPT_DIR}/k8s/istiofeatures/gateway-auth/3-authorization-policy-require-admin.yml" --ignore-not-found 2>/dev/null || true
 oc delete -f "${SCRIPT_DIR}/k8s/istiofeatures/gateway-auth/1-request-authentication.yml" --ignore-not-found 2>/dev/null || true
 safe_delete keycloakrealmimport servicemesh -n servicemesh-keycloak
@@ -57,16 +66,25 @@ safe_delete_ns servicemesh-keycloak
 ok "Keycloak removed"
 
 # ----------------------------------------------------------------------------
-# Step 2: UI Plugins (Distributed Tracing + Perses Monitoring)
+# Step 3: UI Plugins (Distributed Tracing + Perses Monitoring)
 # ----------------------------------------------------------------------------
-info "Step 2: Removing UI Plugins ..."
+info "Step 3: Removing UI Plugins ..."
 safe_delete uiplugin distributed-tracing
 safe_delete uiplugin monitoring
+oc wait --for=delete uiplugin/distributed-tracing uiplugin/monitoring --timeout=120s 2>/dev/null || true
+# COO removes the ConsolePlugins, but not their entries in the console config
+for plugin in distributed-tracing-console-plugin monitoring-console-plugin; do
+  idx=$(oc get consoles.operator.openshift.io cluster -o jsonpath='{range .spec.plugins[*]}{@}{"\n"}{end}' | grep -nx "$plugin" | cut -d: -f1)
+  if [[ -n "$idx" ]]; then
+    oc patch consoles.operator.openshift.io cluster --type=json -p "[{\"op\":\"remove\",\"path\":\"/spec/plugins/$((idx - 1))\"}]"
+    ok "Removed ${plugin} from the console config"
+  fi
+done
 
 # ----------------------------------------------------------------------------
-# Step 3: Tracing resources
+# Step 4: Tracing resources
 # ----------------------------------------------------------------------------
-info "Step 3: Removing tracing resources ..."
+info "Step 4: Removing tracing resources ..."
 oc delete -f "${SCRIPT_DIR}/k8s/tracing/istio-update.yml" --ignore-not-found 2>/dev/null || true
 oc delete -f "${SCRIPT_DIR}/k8s/tracing/telemetry.yml" --ignore-not-found 2>/dev/null || true
 oc delete -f "${SCRIPT_DIR}/k8s/tracing/networkpolicies.yml" --ignore-not-found 2>/dev/null || true
@@ -84,16 +102,16 @@ safe_delete_ns seaweedfs
 ok "Tracing resources removed"
 
 # ----------------------------------------------------------------------------
-# Step 4: Observability stack
+# Step 5: Observability stack
 # ----------------------------------------------------------------------------
-info "Step 4: Removing observability stack ..."
+info "Step 5: Removing observability stack ..."
 oc delete -k "${SCRIPT_DIR}/k8s/observability" --ignore-not-found 2>/dev/null || true
 ok "Observability resources removed"
 
 # ----------------------------------------------------------------------------
-# Step 5: Istio, IstioCNI, ZTunnel
+# Step 6: Istio, IstioCNI, ZTunnel
 # ----------------------------------------------------------------------------
-info "Step 5: Removing Istio, IstioCNI, and ZTunnel ..."
+info "Step 6: Removing Istio, IstioCNI, and ZTunnel ..."
 safe_delete ztunnel default
 safe_delete istiocni default
 safe_delete istio default
@@ -105,9 +123,9 @@ oc wait --for=delete ztunnel/default --timeout=120s 2>/dev/null || true
 ok "Istio components removed"
 
 # ----------------------------------------------------------------------------
-# Step 6: Operator subscriptions and CSVs
+# Step 7: Operator subscriptions and CSVs
 # ----------------------------------------------------------------------------
-info "Step 6: Removing operator subscriptions ..."
+info "Step 7: Removing operator subscriptions ..."
 safe_delete subscription kiali-ossm -n openshift-operators
 safe_delete subscription servicemeshoperator3 -n openshift-operators
 safe_delete subscription tempo-product -n openshift-tempo-operator
@@ -121,12 +139,21 @@ for ns in openshift-operators openshift-tempo-operator openshift-opentelemetry-o
     ok "Deleted ${csv} in ${ns}"
   done
 done
+
+# OLM doesn't remove cluster-scoped RBAC shipped in the bundles
+for res in $(oc get clusterrole,clusterrolebinding -l olm.managed=true \
+    -o jsonpath='{range .items[*]}{.kind}/{.metadata.name} {.metadata.labels.olm\.owner} {.metadata.labels.app\.kubernetes\.io/name}{"\n"}{end}' 2>/dev/null \
+    | grep -E ' (kiali-operator|servicemeshoperator3|tempo-operator|opentelemetry-operator|cluster-observability-operator)(\.| |$)' \
+    | cut -d' ' -f1 || true); do
+  oc delete "$res" --ignore-not-found 2>/dev/null || true
+  ok "Deleted ${res}"
+done
 ok "Operator subscriptions and CSVs removed"
 
 # ----------------------------------------------------------------------------
-# Step 7: Namespaces
+# Step 8: Namespaces
 # ----------------------------------------------------------------------------
-info "Step 7: Removing namespaces ..."
+info "Step 8: Removing namespaces ..."
 safe_delete_ns perses-dev
 safe_delete_ns tempostack
 safe_delete_ns istio-system
@@ -137,9 +164,9 @@ safe_delete_ns openshift-opentelemetry-operator
 safe_delete_ns openshift-cluster-observability-operator
 
 # ----------------------------------------------------------------------------
-# Step 8: Revert OVN-Kubernetes gateway config (optional)
+# Step 9: Revert OVN-Kubernetes gateway config (optional)
 # ----------------------------------------------------------------------------
-info "Step 8: Reverting OVN-Kubernetes local gateway mode ..."
+info "Step 9: Reverting OVN-Kubernetes local gateway mode ..."
 oc patch networks.operator.openshift.io cluster --type=json \
   -p='[{"op":"remove","path":"/spec/defaultNetwork/ovnKubernetesConfig/gatewayConfig/routingViaHost"}]' 2>/dev/null || \
   warn "Could not revert OVN-Kubernetes gateway config (may already be default)"
