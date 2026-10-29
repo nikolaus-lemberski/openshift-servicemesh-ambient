@@ -78,6 +78,10 @@ echo ""
 # Step 1: Operators
 # ----------------------------------------------------------------------------
 info "Step 1: Installing operators ..."
+# OLM enables the Pod Security label sync on openshift-operators, lets cleanup.sh revert it
+if [[ -z "$(oc get namespace openshift-operators -o jsonpath='{.metadata.labels.security\.openshift\.io/scc\.podSecurityLabelSync}')" ]]; then
+  oc annotate namespace openshift-operators servicemesh-workshop/pod-security-label-sync=unset --overwrite
+fi
 oc apply -f "${SCRIPT_DIR}/k8s/operators/subscriptions.yml"
 
 wait_for_csv openshift-operators kiali-operator
@@ -101,18 +105,24 @@ fi
 # Step 3: OVN-Kubernetes local gateway mode
 # ----------------------------------------------------------------------------
 info "Step 3: Configuring OVN-Kubernetes for local gateway mode ..."
-oc patch networks.operator.openshift.io cluster --type=merge -p '{
-  "spec": {
-    "defaultNetwork": {
-      "ovnKubernetesConfig": {
-        "gatewayConfig": {
-          "routingViaHost": true
+if [[ "$(oc get networks.operator.openshift.io cluster -o jsonpath='{.spec.defaultNetwork.ovnKubernetesConfig.gatewayConfig.routingViaHost}')" == "true" ]]; then
+  ok "OVN-Kubernetes already in local gateway mode"
+else
+  oc patch networks.operator.openshift.io cluster --type=merge -p '{
+    "spec": {
+      "defaultNetwork": {
+        "ovnKubernetesConfig": {
+          "gatewayConfig": {
+            "routingViaHost": true
+          }
         }
       }
     }
-  }
-}'
-ok "OVN-Kubernetes patched"
+  }'
+  # Lets cleanup.sh revert only what the workshop changed
+  oc annotate networks.operator.openshift.io cluster servicemesh-workshop/routing-via-host=patched --overwrite
+  ok "OVN-Kubernetes patched"
+fi
 
 # ----------------------------------------------------------------------------
 # Step 4: Istio, IstioCNI, ZTunnel
@@ -133,8 +143,14 @@ ok "Istio components ready"
 # ----------------------------------------------------------------------------
 info "Step 5: Enabling user workload monitoring ..."
 if oc -n openshift-monitoring get configmap cluster-monitoring-config &>/dev/null; then
-  oc -n openshift-monitoring patch configmap cluster-monitoring-config \
-    -p '{"data":{"config.yaml":"enableUserWorkload: true"}}'
+  # Keep the existing settings, only set enableUserWorkload
+  monitoring_config=$(oc -n openshift-monitoring get configmap cluster-monitoring-config -o jsonpath='{.data.config\.yaml}')
+  if ! grep -qE '^enableUserWorkload:[[:space:]]*true' <<<"$monitoring_config"; then
+    monitoring_config="$(grep -vE '^enableUserWorkload:' <<<"$monitoring_config" || true)"$'\n'"enableUserWorkload: true"
+    oc -n openshift-monitoring set data configmap/cluster-monitoring-config "config.yaml=${monitoring_config}"
+    oc -n openshift-monitoring annotate configmap cluster-monitoring-config \
+      servicemesh-workshop/user-workload-monitoring=enabled --overwrite
+  fi
 else
   oc apply -f - <<'EOF'
 kind: ConfigMap
@@ -142,6 +158,8 @@ apiVersion: v1
 metadata:
   name: cluster-monitoring-config
   namespace: openshift-monitoring
+  annotations:
+    servicemesh-workshop/user-workload-monitoring: created
 data:
   config.yaml: |
     enableUserWorkload: true

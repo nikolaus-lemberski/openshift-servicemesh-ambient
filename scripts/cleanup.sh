@@ -120,6 +120,8 @@ info "Waiting for Istio components to terminate ..."
 oc wait --for=delete istio/default --timeout=120s 2>/dev/null || true
 oc wait --for=delete istiocni/default --timeout=120s 2>/dev/null || true
 oc wait --for=delete ztunnel/default --timeout=120s 2>/dev/null || true
+# istiod creates the GatewayClasses, but doesn't remove them
+safe_delete gatewayclass istio istio-remote istio-waypoint
 ok "Istio components removed"
 
 # ----------------------------------------------------------------------------
@@ -134,7 +136,7 @@ safe_delete subscription cluster-observability-operator -n openshift-cluster-obs
 
 info "Removing ClusterServiceVersions ..."
 for ns in openshift-operators openshift-tempo-operator openshift-opentelemetry-operator openshift-cluster-observability-operator; do
-  for csv in $(oc get csv -n "$ns" -o name 2>/dev/null | grep -E 'kiali|servicemesh|tempo|opentelemetry|cluster-observability' || true); do
+  for csv in $(oc get csv -n "$ns" -l '!olm.copiedFrom' -o name 2>/dev/null | grep -E 'kiali|servicemesh|tempo|opentelemetry|cluster-observability' || true); do
     oc delete "$csv" -n "$ns" --ignore-not-found 2>/dev/null || true
     ok "Deleted ${csv} in ${ns}"
   done
@@ -148,7 +150,32 @@ for res in $(oc get clusterrole,clusterrolebinding -l olm.managed=true \
   oc delete "$res" --ignore-not-found 2>/dev/null || true
   ok "Deleted ${res}"
 done
-ok "Operator subscriptions and CSVs removed"
+# The Perses roles of the Cluster Observability Operator don't always keep the olm.owner label
+for res in $(oc get clusterrole -l olm.managed=true,app.kubernetes.io/part-of=perses-operator -o name 2>/dev/null); do
+  oc delete "$res" --ignore-not-found 2>/dev/null || true
+  ok "Deleted ${res}"
+done
+
+# OLM doesn't remove CRDs either. CRDs also used by another installation of the same operator
+# (e.g. a second rhbk-operator) carry its label as well, those only lose the workshop label.
+# OLM truncates the operator names (<package>.<namespace>) to 63 characters.
+info "Removing operator CRDs ..."
+WORKSHOP_OPERATORS="kiali-ossm.openshift-operators servicemeshoperator3.openshift-operators
+  tempo-product.openshift-tempo-operator opentelemetry-product.openshift-opentelemetry-operator
+  cluster-observability-operator.openshift-cluster-observability rhbk-operator.servicemesh-keycloak"
+for op in $WORKSHOP_OPERATORS; do
+  for crd in $(oc get crd -l "operators.coreos.com/${op}" -o name 2>/dev/null); do
+    [[ "$crd" =~ \.gateway\.networking\.(x-)?k8s\.io$ ]] && continue  # shipped with OpenShift
+    if oc get "$crd" -o jsonpath='{.metadata.labels}' | grep -o '"operators.coreos.com/[^"]*"' | grep -vq "\"operators.coreos.com/${op}\""; then
+      oc label "$crd" "operators.coreos.com/${op}-" >/dev/null
+      ok "Kept ${crd} (used by another operator installation)"
+    else
+      oc delete "$crd" --ignore-not-found --wait=false >/dev/null
+      ok "Deleted ${crd}"
+    fi
+  done
+done
+ok "Operator subscriptions, CSVs, and CRDs removed"
 
 # ----------------------------------------------------------------------------
 # Step 8: Namespaces
@@ -163,13 +190,60 @@ safe_delete_ns openshift-tempo-operator
 safe_delete_ns openshift-opentelemetry-operator
 safe_delete_ns openshift-cluster-observability-operator
 
+info "Waiting for namespaces to terminate ..."
+oc wait --for=delete namespace/servicemesh-keycloak namespace/seaweedfs namespace/perses-dev \
+  namespace/tempostack namespace/istio-system namespace/istio-cni namespace/ztunnel \
+  namespace/openshift-tempo-operator namespace/openshift-opentelemetry-operator \
+  namespace/openshift-cluster-observability-operator --timeout=300s 2>/dev/null || true
+
+# OLM keeps an Operator resource as long as components of the operator exist
+for op in $WORKSHOP_OPERATORS; do
+  safe_delete operators.operators.coreos.com "$op"
+done
+
 # ----------------------------------------------------------------------------
-# Step 9: Revert OVN-Kubernetes gateway config (optional)
+# Step 9: Revert cluster settings changed by install.sh
 # ----------------------------------------------------------------------------
-info "Step 9: Reverting OVN-Kubernetes local gateway mode ..."
-oc patch networks.operator.openshift.io cluster --type=json \
-  -p='[{"op":"remove","path":"/spec/defaultNetwork/ovnKubernetesConfig/gatewayConfig/routingViaHost"}]' 2>/dev/null || \
-  warn "Could not revert OVN-Kubernetes gateway config (may already be default)"
+info "Step 9: Reverting cluster settings ..."
+case "$(oc -n openshift-monitoring get configmap cluster-monitoring-config \
+    -o jsonpath='{.metadata.annotations.servicemesh-workshop/user-workload-monitoring}' 2>/dev/null)" in
+  created)
+    oc -n openshift-monitoring delete configmap cluster-monitoring-config
+    # Created by the cluster monitoring operator for user workload monitoring, but not removed
+    safe_delete clusterrolebinding thanos-ruler-monitoring
+    ok "Deleted cluster-monitoring-config (user workload monitoring disabled)"
+    ;;
+  enabled)
+    monitoring_config=$(oc -n openshift-monitoring get configmap cluster-monitoring-config -o jsonpath='{.data.config\.yaml}' \
+      | grep -vE '^enableUserWorkload:' || true)
+    oc -n openshift-monitoring set data configmap/cluster-monitoring-config "config.yaml=${monitoring_config}"
+    oc -n openshift-monitoring annotate configmap cluster-monitoring-config servicemesh-workshop/user-workload-monitoring-
+    ok "Removed enableUserWorkload from cluster-monitoring-config"
+    ;;
+  *)
+    info "User workload monitoring was not enabled by install.sh, leaving it as is"
+    ;;
+esac
+
+if [[ "$(oc get namespace openshift-operators \
+    -o jsonpath='{.metadata.annotations.servicemesh-workshop/pod-security-label-sync}')" == "unset" ]]; then
+  oc label namespace openshift-operators security.openshift.io/scc.podSecurityLabelSync- \
+    pod-security.kubernetes.io/audit- pod-security.kubernetes.io/audit-version- \
+    pod-security.kubernetes.io/warn- pod-security.kubernetes.io/warn-version- >/dev/null
+  oc annotate namespace openshift-operators security.openshift.io/MinimallySufficientPodSecurityStandard- \
+    servicemesh-workshop/pod-security-label-sync- >/dev/null
+  ok "Reverted Pod Security label sync on openshift-operators"
+fi
+
+if [[ "$(oc get networks.operator.openshift.io cluster \
+    -o jsonpath='{.metadata.annotations.servicemesh-workshop/routing-via-host}')" == "patched" ]]; then
+  oc patch networks.operator.openshift.io cluster --type=json \
+    -p='[{"op":"remove","path":"/spec/defaultNetwork/ovnKubernetesConfig/gatewayConfig/routingViaHost"}]'
+  oc annotate networks.operator.openshift.io cluster servicemesh-workshop/routing-via-host-
+  ok "Reverted OVN-Kubernetes local gateway mode"
+else
+  info "OVN-Kubernetes local gateway mode was not set by install.sh, leaving it as is"
+fi
 
 # ============================================================================
 echo ""
