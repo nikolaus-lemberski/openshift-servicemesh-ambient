@@ -1,10 +1,10 @@
 apiVersion: kiali.io/v1alpha1
 kind: Kiali
-annotations:
-  ansible.sdk.operatorframework.io/reconcile-period: 60s
 metadata:
   name: kiali-user-workload-monitoring
   namespace: istio-system
+  annotations:
+    ansible.sdk.operatorframework.io/reconcile-period: 60s
 spec:
   deployment:
     cluster_wide_access: true
@@ -24,6 +24,8 @@ spec:
       enabled: true
       url_format: openshift
       # external_url (the OpenShift console URL) is cluster specific and set with "oc patch", see chapters/01-installation.md
+      # Without it, Kiali has no URL to check and always reports Perses as unreachable
+      health_check_url: https://perses.openshift-cluster-observability-operator.svc.cluster.local:8080/api/v1/health
       project: perses-dev
       is_core: false
       auth:
@@ -52,9 +54,26 @@ spec:
           workload: var-workload
     prometheus:
       auth:
-        ca_file: /kiali-cabundle/service-ca.crt
         type: bearer
         use_kiali_token: true
       thanos_proxy:
         enabled: true
       url: https://thanos-querier.openshift-monitoring.svc.cluster.local:9091
+    tracing:
+      enabled: true
+      provider: tempo
+      use_grpc: false
+      # Since Istio 1.30 the waypoint reports its spans with its own service.name (waypoint.<namespace>)
+      use_waypoint_name: true
+      # Tempo API of the tenant "dev" behind the TempoStack gateway
+      internal_url: https://tempo-tempostack-gateway.tempostack.svc.cluster.local:8080/api/traces/v1/dev/tempo
+      # external_url (the OpenShift console URL) is cluster specific and set with "oc patch", see chapters/01-installation.md
+      auth:
+        type: bearer
+        use_kiali_token: true
+      tempo_config:
+        # "View in Tracing" links open Observe > Traces in the OpenShift console
+        url_format: openshift
+        name: tempostack
+        namespace: tempostack
+        tenant: dev

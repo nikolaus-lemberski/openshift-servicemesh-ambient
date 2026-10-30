@@ -1,6 +1,6 @@
 # 1. Installation
 
-Tested versions: **OpenShift 4.22** and **Red Hat OpenShift Service Mesh 3.4** (Istio 1.30, Kiali 2.27). OpenShift Service Mesh 3.4 needs OpenShift 4.20 or later.
+Tested versions: **OpenShift 4.22** and **Red Hat OpenShift Service Mesh 3.5** (Istio 1.31, Kiali 2.33). OpenShift Service Mesh 3.5 needs OpenShift 4.20 or later.
 
 ## Architecture Overview
 
@@ -171,11 +171,14 @@ oc apply -k k8s/observability
 
 Perses dashboards are available in the OpenShift console under **Observe > Dashboards (Perses)**.
 
-Kiali links its metrics pages to the Perses dashboards in the OpenShift console. For that, Kiali needs the URL of your OpenShift console:
+Kiali links its metrics pages to the Perses dashboards and its traces to the Distributed Tracing UI in the OpenShift console. For that, Kiali needs the URL of your OpenShift console:
 
 ```bash
-oc patch kiali kiali-user-workload-monitoring -n istio-system --type merge -p "{\"spec\":{\"external_services\":{\"perses\":{\"external_url\":\"https://$(oc get route console -n openshift-console -o jsonpath='{.spec.host}')\"}}}}"
+export CONSOLE_URL="https://$(oc get route console -n openshift-console -o jsonpath='{.spec.host}')"
+oc patch kiali kiali-user-workload-monitoring -n istio-system --type merge -p "{\"spec\":{\"external_services\":{\"perses\":{\"external_url\":\"${CONSOLE_URL}\"},\"tracing\":{\"external_url\":\"${CONSOLE_URL}\"}}}}"
 ```
+
+Kiali is already configured to read traces from the TempoStack we create in [Distributed Tracing](#distributed-tracing). Until then, Kiali shows the tracing component as unreachable.
 
 You will have to login to OpenShift again when the console plugin is installed. The URL to Kiali you'll find with:
 

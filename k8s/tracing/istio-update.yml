@@ -4,7 +4,7 @@ metadata:
   name: default
 spec:
   namespace: istio-system
-  version: v1.30-latest
+  version: v1.31-latest
   profile: ambient
   values:
     # global:

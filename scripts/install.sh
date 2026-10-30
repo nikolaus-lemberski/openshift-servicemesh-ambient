@@ -98,7 +98,7 @@ info "Step 2: Checking Gateway API CRDs ..."
 if oc get crd gateways.gateway.networking.k8s.io &>/dev/null; then
   ok "Gateway API CRDs present"
 else
-  fail "Gateway API CRDs not found. OpenShift Service Mesh 3.4 requires OpenShift 4.20 or later."
+  fail "Gateway API CRDs not found. OpenShift Service Mesh 3.5 requires OpenShift 4.20 or later."
 fi
 
 # ----------------------------------------------------------------------------
@@ -177,10 +177,10 @@ info "Step 6: Installing observability stack (monitors, Perses, Kiali, OSSMConso
 oc apply -k "${SCRIPT_DIR}/k8s/observability"
 wait_for_pods istio-system 300
 
-info "Configuring Kiali links to the Perses dashboards in the OpenShift console ..."
+info "Configuring Kiali links to the Perses dashboards and traces in the OpenShift console ..."
 CONSOLE_URL="https://$(oc get route console -n openshift-console -o jsonpath='{.spec.host}')"
 oc patch kiali kiali-user-workload-monitoring -n istio-system --type merge \
-  -p "{\"spec\":{\"external_services\":{\"perses\":{\"external_url\":\"${CONSOLE_URL}\"}}}}"
+  -p "{\"spec\":{\"external_services\":{\"perses\":{\"external_url\":\"${CONSOLE_URL}\"},\"tracing\":{\"external_url\":\"${CONSOLE_URL}\"}}}}"
 ok "Observability stack installed"
 
 # ----------------------------------------------------------------------------

@@ -74,6 +74,44 @@ Click on a trace to see the spans of the Gateway and the waypoint for every hop 
 
 ![Distributed Tracing](../assets/img/9-distributed-tracing.png)
 
+## Traces in Kiali
+
+Kiali reads the traces from the same TempoStack and shows them next to the traffic graph and the metrics. It is configured in the `Kiali` resource (`k8s/observability/kiali.yml`):
+
+```yaml
+spec:
+  external_services:
+    tracing:
+      enabled: true
+      provider: tempo
+      use_grpc: false
+      use_waypoint_name: true
+      internal_url: https://tempo-tempostack-gateway.tempostack.svc.cluster.local:8080/api/traces/v1/dev/tempo
+      auth:
+        type: bearer
+        use_kiali_token: true
+      tempo_config:
+        url_format: openshift
+        name: tempostack
+        namespace: tempostack
+        tenant: dev
+```
+
+| Field                | Meaning                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `internal_url`       | Tempo API of the tenant `dev`, behind the TempoStack gateway                                                     |
+| `auth`               | Kiali authenticates with its ServiceAccount token. All authenticated users may read the `dev` tenant (ClusterRole `tempostack-traces-reader`) |
+| `use_waypoint_name`  | The waypoint reports its spans as `waypoint.servicemesh-apps`, so Kiali looks up the traces of a service via its waypoint |
+| `tempo_config`       | *View in Tracing* links open the trace in **Observe -> Traces** of the OpenShift console (`external_url` is the console URL) |
+
+With the traffic still running, open Kiali and go to
+
+```text
+Services -> service-c -> Traces
+```
+
+Every dot in the chart is a trace. Click one to see its spans and how long each hop took. *View in Tracing* opens the same trace in the Distributed Tracing UI of the OpenShift console. You also find the traces in the *Traffic Graph*: click on a service node and open the *Traces* tab in the side panel.
+
 ---
 
 [← 4. Gateway and Waypoint Proxy](04-gateway-and-waypoint.md) | [Overview](../README.md) | [6. Authentication and Authorization on the Gateway →](06-gateway-auth.md)
