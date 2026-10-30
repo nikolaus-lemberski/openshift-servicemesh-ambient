@@ -4,11 +4,16 @@ Workshop demonstrating **Red Hat OpenShift Service Mesh 3** in ambient mode on O
 
 Three microservices form a call chain (A → B → C) to showcase Istio ambient mesh capabilities: **ztunnel** for L4 mTLS and **waypoint proxies** for L7 HTTP routing, authorization, observability, and resilience.
 
-| Service | Runtime | Framework |
-|---------|---------|-----------|
-| service-a | Python 3 | ASGI + uvicorn |
-| service-b | TypeScript | Node.js + Express |
-| service-c | Java 25 | Quarkus |
+```mermaid
+graph LR
+    User --> GW["Gateway"]
+    subgraph mesh["servicemesh-apps (ambient)"]
+        GW --> A["Service A<br/>Python"]
+        A --> B["Service B<br/>Node.js"]
+        B --> C1["Service C v1<br/>Quarkus"]
+        B -.-> C2["Service C v2<br/>Quarkus"]
+    end
+```
 
 ## Topics Covered
 
