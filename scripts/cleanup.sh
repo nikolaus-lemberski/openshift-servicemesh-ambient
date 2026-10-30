@@ -44,8 +44,9 @@ fi
 # ----------------------------------------------------------------------------
 info "Step 1: Removing workshop apps ..."
 safe_delete pod curl-test -n default
+safe_delete_ns servicemesh-sidecar
 safe_delete_ns servicemesh-apps
-oc wait --for=delete namespace/servicemesh-apps --timeout=180s 2>/dev/null || true
+oc wait --for=delete namespace/servicemesh-sidecar namespace/servicemesh-apps --timeout=180s 2>/dev/null || true
 ok "Workshop apps removed"
 
 # ----------------------------------------------------------------------------

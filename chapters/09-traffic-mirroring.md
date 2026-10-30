@@ -112,10 +112,6 @@ oc delete -f k8s/istiofeatures/canary/0-service-c-versions.yml
 
 ---
 
-## Congratulations, you're done!
-
-You have successfully explored Istio Service Mesh on OpenShift in ambient mode — from L4 security with the ztunnel all the way to L7 traffic management with waypoint proxies.
-
 > [!NOTE]
 > **Why do we mix Gateway API and Istio APIs?**
 >
@@ -136,4 +132,4 @@ You have successfully explored Istio Service Mesh on OpenShift in ambient mode �
 
 ---
 
-[← 8. Circuit Breaker](08-circuit-breaker.md) | [Overview](../README.md)
+[← 8. Circuit Breaker](08-circuit-breaker.md) | [Overview](../README.md) | [10. Ambient and Sidecar Side by Side →](10-sidecar-interop.md)

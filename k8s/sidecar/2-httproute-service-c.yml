@@ -1,0 +1,17 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: service-c-to-sidecar
+  namespace: servicemesh-apps
+spec:
+  parentRefs:
+  - group: ""
+    kind: Service
+    name: service-c
+    port: 8080
+  rules:
+  - backendRefs:
+    - kind: Service
+      name: service-c
+      namespace: servicemesh-sidecar
+      port: 8080

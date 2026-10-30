@@ -43,6 +43,7 @@ service-c has two versions (v1, v2) and crash/repair endpoints for resilience de
 - `k8s/tracing/` — TempoStack, OTel collector, telemetry, network policies, tracing UI plugin
 - `k8s/operators/` — operator subscriptions
 - `k8s/keycloak/` — Red Hat build of Keycloak (operator, PostgreSQL, realm) as OIDC provider for Gateway auth
+- `k8s/sidecar/` — second copy of the apps with sidecars (namespace `servicemesh-sidecar`, reuses `k8s/apps`), cross-namespace HTTPRoute, mTLS/AuthZ demo
 - `k8s/istiofeatures/` — canary, circuit-breaker, gateway-auth (JWT AuthN/AuthZ), l4-authz, mirroring, mTLS demos
 
 ## Key Files
@@ -50,13 +51,13 @@ service-c has two versions (v1, v2) and crash/repair endpoints for resilience de
 - `apps/podman-compose.yml` — local dev compose (all three services)
 - `apps/tag-and-push.sh` — container image build and push helper
 - `chapters/01-installation.md` — full installation guide (operators, Istio, observability, tracing, Keycloak)
-- `chapters/02-*.md` to `chapters/09-*.md` — workshop walkthrough, one numbered file per chapter (onboarding, L4 security, gateway/waypoint, tracing, gateway auth, canary, circuit breaker, mirroring)
+- `chapters/02-*.md` to `chapters/10-*.md` — workshop walkthrough, one numbered file per chapter (onboarding, L4 security, gateway/waypoint, tracing, gateway auth, canary, circuit breaker, mirroring, ambient/sidecar interop)
 
 ## Conventions
 
 - K8s manifests use `.yml` extension
 - Apply kustomize dirs with `oc apply -k`, individual files with `oc apply -f`
-- Apps namespace: `servicemesh-apps`, mesh control plane: `istio-system`
+- Apps namespace: `servicemesh-apps` (ambient), `servicemesh-sidecar` (sidecars), mesh control plane: `istio-system`
 - Label `istio-discovery: enabled` on namespaces for mesh discovery
 - Label `istio.io/dataplane-mode=ambient` to onboard namespaces
 - Label `istio.io/use-waypoint=waypoint` for waypoint enrollment

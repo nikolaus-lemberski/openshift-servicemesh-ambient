@@ -27,3 +27,4 @@ Three microservices form a call chain (A → B → C) to showcase Istio ambient 
 7. [Canary Release](chapters/07-canary-release.md) — shift traffic gradually from v1 to v2
 8. [Circuit Breaker](chapters/08-circuit-breaker.md) — outlier detection and retries
 9. [Traffic Mirroring](chapters/09-traffic-mirroring.md) — send a copy of live traffic to a new version
+10. [Ambient and Sidecar Side by Side](chapters/10-sidecar-interop.md) — run the apps with sidecars and route from ambient to sidecar workloads
