@@ -13,16 +13,6 @@ In this chapter we deploy a second copy of our apps with sidecars, explore it in
 
 ## Deploy the apps with sidecars
 
-```mermaid
-graph LR
-    subgraph servicemesh-apps [servicemesh-apps - ambient]
-        A1[Service A] --> B1[Service B] --> C1[Service C v1]
-    end
-    subgraph servicemesh-sidecar [servicemesh-sidecar - sidecars]
-        A2[Service A] --> B2[Service B] --> C2[Service C v1]
-    end
-```
-
 The kustomization in `k8s/sidecar` reuses the manifests from `k8s/apps` and deploys them into the namespace `servicemesh-sidecar`. The only difference is the label on the namespace:
 
 ```yaml
