@@ -104,13 +104,44 @@ spec:
 | `use_waypoint_name`  | The waypoint reports its spans as `waypoint.servicemesh-apps`, so Kiali looks up the traces of a service via its waypoint |
 | `tempo_config`       | *View in Tracing* links open the trace in **Observe -> Traces** of the OpenShift console (`external_url` is the console URL) |
 
-With the traffic still running, open Kiali and go to
+Keep the traffic running and open Kiali:
+
+```bash
+echo "https://$(oc get route -n istio-system kiali -o jsonpath='{.spec.host}')"
+```
+
+### Traces of a service
+
+Select the namespace `servicemesh-apps` and go to
 
 ```text
 Services -> service-c -> Traces
 ```
 
-Every dot in the chart is a trace. Click one to see its spans and how long each hop took. *View in Tracing* opens the same trace in the Distributed Tracing UI of the OpenShift console. You also find the traces in the *Traffic Graph*: click on a service node and open the *Traces* tab in the side panel.
+The chart shows one dot per trace that went through service-c: the time of the request on the x-axis and its duration on the y-axis. Hover over a dot for a summary (duration, number of spans), traces with errors are shown as *Error Traces* in red. Click on a dot to open the trace below the chart:
+
+- **Trace Details** shows the trace with its spans and compares it with similar traces on the chart.
+- **Span Details** lists every span: the Gateway and the waypoint for each hop to service-a, service-b and service-c, with duration and HTTP status code.
+
+As our apps forward the trace headers, a trace of service-c contains the full path from the Gateway to service-c.
+
+*View in Tracing* opens the same trace in **Observe -> Traces** of the OpenShift console, *View on Graph* shows its path in the Traffic Graph.
+
+### Traces in the Traffic Graph
+
+Go to the *Traffic Graph* of the namespace `servicemesh-apps` and click on the `service-c` service node. The side panel on the right now has a *Traces* tab with the latest traces. Click on a trace and Kiali highlights its path in the graph. *Show Traces* takes you to the *Traces* tab of the service.
+
+### Traces in the OpenShift console
+
+The OpenShift Service Mesh console plugin shows the same information without leaving the OpenShift console. Go to
+
+```text
+Networking -> Services -> service-c -> Service Mesh -> Traces
+```
+
+or use *Service Mesh -> Traffic Graph* as in the Kiali UI.
+
+![Traces in Kiali](../assets/img/9-kiali-tracing.png)
 
 ---
 
