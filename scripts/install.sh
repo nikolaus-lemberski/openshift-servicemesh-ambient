@@ -19,7 +19,8 @@ wait_for_csv() {
   local elapsed=0
   while (( elapsed < timeout )); do
     local phase
-    phase=$(oc get csv -n "$ns" -o jsonpath="{.items[?(@.metadata.name >= '${csv_prefix}')].status.phase}" 2>/dev/null || true)
+    phase=$(oc get csv -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end}' 2>/dev/null \
+      | awk -v p="$csv_prefix" 'index($1, p) == 1 {print $2}' || true)
     if [[ "$phase" == *"Succeeded"* ]]; then
       ok "CSV '${csv_prefix}*' succeeded in ${ns}"
       return 0
@@ -82,6 +83,10 @@ info "Step 1: Installing operators ..."
 if [[ -z "$(oc get namespace openshift-operators -o jsonpath='{.metadata.labels.security\.openshift\.io/scc\.podSecurityLabelSync}')" ]]; then
   oc annotate namespace openshift-operators servicemesh-workshop/pod-security-label-sync=unset --overwrite
 fi
+# The Web Terminal pulls in the DevWorkspace operator, which Dev Spaces uses too. Only let cleanup.sh remove it if we install it
+if ! oc get csv -n openshift-operators -o name 2>/dev/null | grep -q devworkspace-operator; then
+  oc annotate namespace openshift-operators servicemesh-workshop/devworkspace-operator=installed --overwrite
+fi
 oc apply -f "${SCRIPT_DIR}/k8s/operators/subscriptions.yml"
 
 wait_for_csv openshift-operators kiali-operator
@@ -89,7 +94,17 @@ wait_for_csv openshift-operators servicemeshoperator3
 wait_for_csv openshift-tempo-operator tempo-operator
 wait_for_csv openshift-opentelemetry-operator opentelemetry-operator
 wait_for_csv openshift-cluster-observability-operator cluster-observability-operator
+wait_for_csv openshift-operators web-terminal
+wait_for_csv openshift-operators devworkspace-operator
 ok "All operators installed"
+
+# Web Terminals stop after 15 min idle by default, too short for a workshop day.
+# The unmanaged-state annotation keeps the operator from reverting the change, cleanup.sh removes it again
+info "Raising the Web Terminal idle timeout to ${WEB_TERMINAL_IDLE_TIMEOUT:=4h} ..."
+until oc get devworkspacetemplate web-terminal-exec -n openshift-operators &>/dev/null; do sleep 5; done
+oc annotate devworkspacetemplate web-terminal-exec -n openshift-operators web-terminal.redhat.com/unmanaged-state=true --overwrite
+oc patch devworkspacetemplate web-terminal-exec -n openshift-operators --type=json \
+  -p="[{\"op\":\"replace\",\"path\":\"/spec/components/0/container/env/0/value\",\"value\":\"${WEB_TERMINAL_IDLE_TIMEOUT}\"}]"
 
 # ----------------------------------------------------------------------------
 # Step 2: Gateway API CRDs (shipped with OpenShift 4.19+)
@@ -296,4 +311,7 @@ echo "  https://$(oc get route -n istio-system kiali -o jsonpath='{.spec.host}' 
 echo ""
 info "Keycloak issuer URL:"
 echo "  https://${KEYCLOAK_HOST}/realms/servicemesh"
+echo ""
+info "Next: set up the workshop users (namespaces, RBAC, Web Terminal tools):"
+echo "  ./scripts/setup-users.sh"
 echo ""

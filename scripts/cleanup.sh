@@ -40,14 +40,11 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
 fi
 
 # ----------------------------------------------------------------------------
-# Step 1: Workshop apps
+# Step 1: Workshop users
 # ----------------------------------------------------------------------------
-info "Step 1: Removing workshop apps ..."
-safe_delete pod curl-test -n default
-safe_delete_ns servicemesh-sidecar
-safe_delete_ns servicemesh-apps
-oc wait --for=delete namespace/servicemesh-sidecar namespace/servicemesh-apps --timeout=180s 2>/dev/null || true
-ok "Workshop apps removed"
+info "Step 1: Removing workshop users ..."
+# Waits for the user namespaces, ambient namespaces should be gone before Istio is removed
+"${SCRIPT_DIR}/scripts/cleanup-users.sh" -y || warn "cleanup-users.sh failed, continuing"
 
 # ----------------------------------------------------------------------------
 # Step 2: Keycloak
@@ -129,15 +126,42 @@ ok "Istio components removed"
 # Step 7: Operator subscriptions and CSVs
 # ----------------------------------------------------------------------------
 info "Step 7: Removing operator subscriptions ..."
+# Web Terminals are DevWorkspaces, delete them while the DevWorkspace controller still runs (it removes their finalizers)
+oc delete devworkspaces.workspace.devfile.io -A -l console.openshift.io/terminal=true --ignore-not-found 2>/dev/null || true
+oc delete devworkspacetemplates.workspace.devfile.io -A -l console.openshift.io/terminal=true --ignore-not-found 2>/dev/null || true
+# The DevWorkspace operator comes with the Web Terminal, but Dev Spaces uses it too.
+# Only remove it if install.sh installed it and no other DevWorkspaces are left
+REMOVE_DEVWORKSPACE=false
+if [[ "$(oc get namespace openshift-operators \
+    -o jsonpath='{.metadata.annotations.servicemesh-workshop/devworkspace-operator}')" == "installed" ]]; then
+  if [[ -z "$(oc get devworkspaces.workspace.devfile.io -A --no-headers 2>/dev/null)" ]]; then
+    REMOVE_DEVWORKSPACE=true
+    oc delete devworkspaceroutings.controller.devfile.io -A --all --ignore-not-found 2>/dev/null || true
+  else
+    warn "Other DevWorkspaces exist, keeping the DevWorkspace operator"
+  fi
+fi
+
+safe_delete subscription web-terminal -n openshift-operators
+if $REMOVE_DEVWORKSPACE; then
+  oc delete subscription -n openshift-operators -l operators.coreos.com/devworkspace-operator.openshift-operators --ignore-not-found
+fi
 safe_delete subscription kiali-ossm -n openshift-operators
 safe_delete subscription servicemeshoperator3 -n openshift-operators
 safe_delete subscription tempo-product -n openshift-tempo-operator
 safe_delete subscription opentelemetry-product -n openshift-opentelemetry-operator
 safe_delete subscription cluster-observability-operator -n openshift-cluster-observability-operator
 
+WORKSHOP_CSVS="kiali|servicemesh|tempo|opentelemetry|cluster-observability|web-terminal"
+WORKSHOP_OLM_OWNERS="kiali-operator|servicemeshoperator3|tempo-operator|opentelemetry-operator|cluster-observability-operator|web-terminal"
+if $REMOVE_DEVWORKSPACE; then
+  WORKSHOP_CSVS+="|devworkspace-operator"
+  WORKSHOP_OLM_OWNERS+="|devworkspace-operator"
+fi
+
 info "Removing ClusterServiceVersions ..."
 for ns in openshift-operators openshift-tempo-operator openshift-opentelemetry-operator openshift-cluster-observability-operator; do
-  for csv in $(oc get csv -n "$ns" -l '!olm.copiedFrom' -o name 2>/dev/null | grep -E 'kiali|servicemesh|tempo|opentelemetry|cluster-observability' || true); do
+  for csv in $(oc get csv -n "$ns" -l '!olm.copiedFrom' -o name 2>/dev/null | grep -E "$WORKSHOP_CSVS" || true); do
     oc delete "$csv" -n "$ns" --ignore-not-found 2>/dev/null || true
     ok "Deleted ${csv} in ${ns}"
   done
@@ -146,7 +170,7 @@ done
 # OLM doesn't remove cluster-scoped RBAC shipped in the bundles
 for res in $(oc get clusterrole,clusterrolebinding -l olm.managed=true \
     -o jsonpath='{range .items[*]}{.kind}/{.metadata.name} {.metadata.labels.olm\.owner} {.metadata.labels.app\.kubernetes\.io/name}{"\n"}{end}' 2>/dev/null \
-    | grep -E ' (kiali-operator|servicemeshoperator3|tempo-operator|opentelemetry-operator|cluster-observability-operator)(\.| |$)' \
+    | grep -E " (${WORKSHOP_OLM_OWNERS})(\.| |$)" \
     | cut -d' ' -f1 || true); do
   oc delete "$res" --ignore-not-found 2>/dev/null || true
   ok "Deleted ${res}"
@@ -157,13 +181,29 @@ for res in $(oc get clusterrole -l olm.managed=true,app.kubernetes.io/part-of=pe
   ok "Deleted ${res}"
 done
 
+if $REMOVE_DEVWORKSPACE; then
+  # The DevWorkspace controller creates its webhook server itself, OLM doesn't remove it.
+  # Left behind without a running server, the webhooks would block pod exec cluster-wide
+  safe_delete mutatingwebhookconfiguration controller.devfile.io
+  safe_delete validatingwebhookconfiguration controller.devfile.io
+  safe_delete deployment devworkspace-webhook-server -n openshift-operators
+  safe_delete service devworkspace-webhookserver -n openshift-operators
+  safe_delete serviceaccount devworkspace-webhook-server -n openshift-operators
+  safe_delete secret devworkspace-webhookserver-tls -n openshift-operators
+  safe_delete clusterrole devworkspace-webhook-server
+  safe_delete clusterrolebinding devworkspace-webhook-server
+  safe_delete clusterrolebinding devworkspace-controller-manager-service-system:auth-delegator
+fi
+
 # OLM doesn't remove CRDs either. CRDs also used by another installation of the same operator
 # (e.g. a second rhbk-operator) carry its label as well, those only lose the workshop label.
 # OLM truncates the operator names (<package>.<namespace>) to 63 characters.
 info "Removing operator CRDs ..."
 WORKSHOP_OPERATORS="kiali-ossm.openshift-operators servicemeshoperator3.openshift-operators
   tempo-product.openshift-tempo-operator opentelemetry-product.openshift-opentelemetry-operator
-  cluster-observability-operator.openshift-cluster-observability rhbk-operator.servicemesh-keycloak"
+  cluster-observability-operator.openshift-cluster-observability rhbk-operator.servicemesh-keycloak
+  web-terminal.openshift-operators"
+$REMOVE_DEVWORKSPACE && WORKSHOP_OPERATORS+=" devworkspace-operator.openshift-operators"
 for op in $WORKSHOP_OPERATORS; do
   for crd in $(oc get crd -l "operators.coreos.com/${op}" -o name 2>/dev/null); do
     [[ "$crd" =~ \.gateway\.networking\.(x-)?k8s\.io$ ]] && continue  # shipped with OpenShift
@@ -234,6 +274,11 @@ if [[ "$(oc get namespace openshift-operators \
   oc annotate namespace openshift-operators security.openshift.io/MinimallySufficientPodSecurityStandard- \
     servicemesh-workshop/pod-security-label-sync- >/dev/null
   ok "Reverted Pod Security label sync on openshift-operators"
+fi
+
+if $REMOVE_DEVWORKSPACE; then
+  oc annotate namespace openshift-operators servicemesh-workshop/devworkspace-operator- >/dev/null
+  ok "Removed the DevWorkspace operator marker from openshift-operators"
 fi
 
 if [[ "$(oc get networks.operator.openshift.io cluster \

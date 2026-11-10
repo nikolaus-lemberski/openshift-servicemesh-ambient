@@ -1,0 +1,113 @@
+# In-cluster download server for the workshop users' Web Terminals, applied by setup-users.sh with
+# envsubst, which only replaces ISTIO_VERSION. istioctl is downloaded once here instead of once per user, so that up to
+# 70 terminals behind the same outbound IP don't run into the GitHub download limits.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workshop-tools
+  labels:
+    servicemesh-workshop/shared: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tools
+  namespace: workshop-tools
+data:
+  # The Web Terminal image has no gettext. Replaces ${VAR} and $VAR, unset variables become empty like in gettext
+  envsubst: |
+    #!/usr/bin/perl -p
+    s#\$(?:\{(\w+)\}|(\w+))#$ENV{$1 // $2} // ""#ge;
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tools
+  namespace: workshop-tools
+  labels:
+    app: tools
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tools
+  template:
+    metadata:
+      labels:
+        app: tools
+        # Restart the pod (new download) when the Istio version changes
+        istio-version: ${ISTIO_VERSION}
+    spec:
+      initContainers:
+      - name: download
+        image: registry.access.redhat.com/ubi9/httpd-24
+        command:
+        - bash
+        - -euc
+        - |
+          case "$(uname -m)" in
+            x86_64) arch=amd64 ;;
+            aarch64) arch=arm64 ;;
+            *) arch=$(uname -m) ;;
+          esac
+          curl -fsSL -o /srv/istioctl.tar.gz \
+            "https://github.com/istio/istio/releases/download/${ISTIO_VERSION}/istioctl-${ISTIO_VERSION}-linux-${arch}.tar.gz"
+          echo "${ISTIO_VERSION}" > /srv/istio-version
+          cp /tools/envsubst /srv/envsubst
+          ls -l /srv
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: srv
+          mountPath: /srv
+        - name: tools
+          mountPath: /tools
+      containers:
+      - name: httpd
+        image: registry.access.redhat.com/ubi9/httpd-24
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /istio-version
+            port: 8080
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: srv
+          mountPath: /var/www/html
+      volumes:
+      - name: srv
+        emptyDir: {}
+      - name: tools
+        configMap:
+          name: tools
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tools
+  namespace: workshop-tools
+spec:
+  selector:
+    app: tools
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
