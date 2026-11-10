@@ -44,7 +44,7 @@ fi
 # ----------------------------------------------------------------------------
 info "Step 1: Removing workshop users ..."
 # Waits for the user namespaces, ambient namespaces should be gone before Istio is removed
-"${SCRIPT_DIR}/scripts/cleanup-users.sh" -y || warn "cleanup-users.sh failed, continuing"
+"${SCRIPT_DIR}/admin-scripts/cleanup-users.sh" -y || warn "cleanup-users.sh failed, continuing"
 
 # ----------------------------------------------------------------------------
 # Step 2: Keycloak

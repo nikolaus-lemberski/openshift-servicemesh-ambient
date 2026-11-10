@@ -31,14 +31,14 @@ The script creates this RBAC:
 
 All objects carry the label `servicemesh-workshop/user=<user>` or `servicemesh-workshop/shared=true`. The teardown in [chapter 3](03-teardown.md) finds them by these labels.
 
-The users also need `istioctl` and `envsubst` in their Web Terminal. Downloading `istioctl` from GitHub in every terminal would run into the GitHub download limits, because all users of a workshop usually share one outbound IP. The script deploys a small download server in the namespace `workshop-tools` instead, which downloads `istioctl` once, in the version of the control plane. The users' `scripts/workshop-env.sh` installs the tools from there.
+The users also need `istioctl` and `envsubst` in their Web Terminal. Downloading `istioctl` from GitHub in every terminal would run into the GitHub download limits, because all users of a workshop usually share one outbound IP. The script deploys a small download server in the namespace `workshop-tools` instead, which downloads `istioctl` once, in the version of the control plane. The users' `user-scripts/workshop-env.sh` installs the tools from there.
 
 ## Set up the users
 
 Run the script as `cluster-admin` after the installation:
 
 ```bash
-./scripts/setup-users.sh
+./admin-scripts/setup-users.sh
 ```
 
 Without arguments, the script detects the workshop users in this order and uses the first source that has users:
@@ -51,7 +51,7 @@ Without arguments, the script detects the workshop users in this order and uses 
 Users with `cluster-admin` rights are skipped. The script shows the users it found and asks before it changes anything. To set up specific users, pass them as arguments:
 
 ```bash
-./scripts/setup-users.sh user1 user2 user3
+./admin-scripts/setup-users.sh user1 user2 user3
 ```
 
 Expected result: the script ends with a table of the users and their namespaces, and the check of the first user's permissions reports `All permissions in place`.
@@ -63,7 +63,7 @@ Expected result: the script ends with a table of the users and their namespaces,
 ```
 
 > [!TIP]
-> The script is idempotent. If a user joins late, run it again with the user name, e.g. `./scripts/setup-users.sh user6`. The other users keep their namespaces and their group membership.
+> The script is idempotent. If a user joins late, run it again with the user name, e.g. `./admin-scripts/setup-users.sh user6`. The other users keep their namespaces and their group membership.
 
 ## Verify
 

@@ -7,7 +7,7 @@ There are two levels of cleanup: remove the workshop users and keep the mesh for
 Between two workshops, remove what [setup-users.sh](02-user-setup.md) created:
 
 ```bash
-./scripts/cleanup-users.sh
+./admin-scripts/cleanup-users.sh
 ```
 
 This deletes:
@@ -21,7 +21,7 @@ The script finds the objects by their labels (`servicemesh-workshop/user` and `s
 To remove only some users, e.g. users who have left, pass their names:
 
 ```bash
-./scripts/cleanup-users.sh user3 user4
+./admin-scripts/cleanup-users.sh user3 user4
 ```
 
 Then only the namespaces and the RBAC of these users are removed, and the users are taken out of the group. The tools server and the shared RBAC stay for the other users.
@@ -35,14 +35,14 @@ oc get namespaces -l servicemesh-workshop/user
 > [!NOTE]
 > The `User` and `Identity` objects stay, they belong to the identity provider. The users' traces stay in the Tempo storage until the retention expires.
 
-For the next workshop, run `./scripts/setup-users.sh` again.
+For the next workshop, run `./admin-scripts/setup-users.sh` again.
 
 ## Remove everything
 
 To remove the whole installation from [chapter 1](01-installation.md):
 
 ```bash
-./scripts/cleanup.sh
+./admin-scripts/cleanup.sh
 ```
 
 The script first runs `cleanup-users.sh`, so that no namespace is in the ambient mesh anymore when Istio is removed. Then it removes Keycloak, the console plugins, the tracing and observability stack, Istio, the operators (including the Web Terminal) and their namespaces, and reverts the cluster settings changed by the installation.

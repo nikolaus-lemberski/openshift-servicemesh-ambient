@@ -1,5 +1,5 @@
 # Workshop environment for the Web Terminal. Source it, don't run it:
-#   source scripts/workshop-env.sh
+#   source user-scripts/workshop-env.sh
 # Source it again after a terminal restart, the downloaded tools and variables are gone then.
 
 _workshop_env() {

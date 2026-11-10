@@ -71,7 +71,7 @@ Make sure you are logged in to your **OpenShift cluster** as an **administrator*
 > For Red Hatters: use "Red Hat OpenShift Container Platform Cluster (Multi-Cloud)" from RHPD and select version 4.22, sno (single-node OpenShift) is sufficient.
 
 ```bash
-./scripts/install.sh
+./admin-scripts/install.sh
 ```
 
 Run the script (and all other commands of the workshop) from the root directory of this repository.

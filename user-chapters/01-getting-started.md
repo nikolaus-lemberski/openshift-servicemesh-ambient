@@ -30,7 +30,7 @@ Clone this repository in the terminal and load the workshop environment:
 ```bash
 git clone https://github.com/nikolaus-lemberski/openshift-servicemesh-ambient.git
 cd openshift-servicemesh-ambient
-source scripts/workshop-env.sh
+source user-scripts/workshop-env.sh
 ```
 
 `workshop-env.sh` does three things:
@@ -59,7 +59,7 @@ istioctl version --remote=false
 You should see your three namespaces, the shared project `perses-dev` with the dashboards (read-only) and the `istioctl` client version.
 
 > [!WARNING]
-> If the Web Terminal restarts (e.g. after a long break), the variables and the installed tools are gone. Go back to the repository with `cd openshift-servicemesh-ambient` (clone it again if it's gone) and run `source scripts/workshop-env.sh`. What you've deployed in your namespaces stays.
+> If the Web Terminal restarts (e.g. after a long break), the variables and the installed tools are gone. Go back to the repository with `cd openshift-servicemesh-ambient` (clone it again if it's gone) and run `source user-scripts/workshop-env.sh`. What you've deployed in your namespaces stays.
 
 ## Run the commands
 
@@ -80,7 +80,7 @@ Some chapters generate traffic in a loop while you work on. Open a second tab wi
 
 ```bash
 cd openshift-servicemesh-ambient
-source scripts/workshop-env.sh
+source user-scripts/workshop-env.sh
 ```
 
 ---

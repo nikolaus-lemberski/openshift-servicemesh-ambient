@@ -50,7 +50,7 @@ The chapters ask users to **label their own namespaces** (`istio.io/dataplane-mo
 
 ### User environment helper
 
-Add a new file `scripts/workshop-env.sh`, which users `source` after cloning (and again after a terminal restart):
+Add a new file `user-scripts/workshop-env.sh`, which users `source` after cloning (and again after a terminal restart):
 
 ```bash
 export WORKSHOP_USER=$(oc whoami)
@@ -85,13 +85,13 @@ The admin script creates a ConfigMap `workshop-info` in every `<u>-terminal` nam
 - Option 2 (custom tooling image with the tools built in) not pursued: it needs a registry and a rebuild per Istio version. Revisit only if the workshop runs often.
 - [x] Tested (2026-11-10): `istioctl ztunnel-config workload/svc -n ztunnel` works as `user1` after adding `get/list daemonsets` to the ztunnel Role (istioctl looks up the DaemonSet first). Original item: `istioctl ztunnel-config workload -n ztunnel` with the ztunnel RBAC from 1.2. Last resort if it doesn't work: Kiali views (Workloads → ztunnel details). The custom tooling image fallback isn't needed.
 
-### 1.2 `scripts/setup-users.sh` (admin, idempotent)
+### 1.2 `admin-scripts/setup-users.sh` (admin, idempotent)
 
 Written (2026-11-10). **Full run tested (2026-11-10)** after `install.sh`: users `user1`–`user5` detected from the realm import, `IstioRevision.spec.version` gives the resolved version (`1.31.1`), the tools server serves istioctl 1.31.1, the Perses viewer roles exist. Re-running with `setup-users.sh -y user1` (late user) keeps the other group members. Fixed during the run: the permission check used `can-i get pods/log`, which `oc` reads as "the pod named log" (always passed) and `can-i create pods/portforward` (always failed). It uses `--subresource` now. Note: `oc auth can-i` also answers `no` for `prometheuses/api` although a SubjectAccessReview allows it, so that one isn't in the check.
 
 
 User detection, first match wins:
-1. Explicit list: `./scripts/setup-users.sh user1 user2 …` or `WORKSHOP_USERS="…"`.
+1. Explicit list: `./admin-scripts/setup-users.sh user1 user2 …` or `WORKSHOP_USERS="…"`.
 2. RHDP Keycloak: `oc get keycloakrealmimport -A`, members of group `/users` (fall back to all users without `/admins` if the group is missing).
 3. htpasswd IdP: user names from the secret referenced in `oauth/cluster`.
 4. Existing `User` objects.
@@ -125,7 +125,7 @@ Output at the end: table of users + namespaces, console URL, Kiali URL, repo URL
 
 ### 1.3 Integration with `install.sh`
 
-- [x] Keep `install.sh` for the platform only (+ Web Terminal). At the end, print "next: `./scripts/setup-users.sh`" (or add an opt-in flag `--with-users`).
+- [x] Keep `install.sh` for the platform only (+ Web Terminal). At the end, print "next: `./admin-scripts/setup-users.sh`" (or add an opt-in flag `--with-users`).
 - [x] Smoke test as `user1` (2026-11-10): all commands of user chapters 1–10 run with `oc`/`istioctl` impersonating `user1` (`--as=user1 --as-group=servicemesh-workshop-users …`), the "outside the mesh" curl and the tool downloads ran in a real Web Terminal pod created as `user1`. Every expected result matched (ch. 3 permissive/strict/L4 deny + ztunnel log, ch. 4 ztunnel svc output, ch. 6 401/403/200, ch. 7 weights, ch. 8 one error with outlier detection and none with retries, ch. 9 counter +11, ch. 10 route conditions and AuthZ). Not covered: console UI, Kiali, Perses and Traces pages as a user (no OIDC login from the CLI), terminal tabs. `user1` was reset afterwards (namespaces empty, labels as after `setup-users.sh`)
 - [ ] Manual run in the browser as a workshop user: console Web Terminal, Kiali login and namespace list, Observe -> Metrics/Dashboards/Traces
 
@@ -172,7 +172,7 @@ user-chapters/
 
 ### 2.4 User chapters
 
-- [x] New `user-chapters/01-getting-started.md`: log in to the console as `userN`, open the Web Terminal (**select project `<u>-terminal`**), `git clone https://github.com/nikolaus-lemberski/openshift-servicemesh-ambient.git`, `cd`, `source scripts/workshop-env.sh`, check with `oc project`/`oc get ns`. Explain the three namespaces. Note on terminal restarts (re-source the env).
+- [x] New `user-chapters/01-getting-started.md`: log in to the console as `userN`, open the Web Terminal (**select project `<u>-terminal`**), `git clone https://github.com/nikolaus-lemberski/openshift-servicemesh-ambient.git`, `cd`, `source user-scripts/workshop-env.sh`, check with `oc project`/`oc get ns`. Explain the three namespaces. Note on terminal restarts (re-source the env).
 - [x] Chapters 02–10: replace `servicemesh-apps` → `$APPS_NS`, `servicemesh-sidecar` → `$SIDECAR_NS` in commands. YAML snippets show `${APPS_NS}` where it matters, namespace snippets show `user1-apps   # <user>-apps`. Kiali/console steps: "select your namespace `<user>-apps`". All `oc apply/delete -f` of app manifests get `-n $APPS_NS` (works even if the user switched projects). Kiali URL from `$KIALI_URL` (users can't read the route in `istio-system`)
 - [x] Ch. 2: no namespace creation (the admin created it, the snippet explains the discovery label), `oc apply -k k8s/apps -n $APPS_NS`, onboarding label step stays. `istioctl ztunnel-config workload --workload-namespace $APPS_NS`. Metrics query with own namespace, Perses: select own namespace in the dashboard variables
 - [x] Ch. 3: the "outside the mesh" client is the Web Terminal itself (`curl http://service-c.$APPS_NS:8080/health`), the `curl-test` pod only in `$APPS_NS`. l4-authz with `envsubst`. ztunnel logs: `grep $APPS_NS`
@@ -182,7 +182,7 @@ user-chapters/
 - [x] Ch. 7–9: namespace replacements only
 - [x] Ch. 10: `oc label namespace $SIDECAR_NS istio-injection=enabled` before `oc apply -k k8s/sidecar -n $SIDECAR_NS`. `envsubst` for files 1–5 (1, 3, 4, 5 without `-n`). Cleanup empties the namespace (apps, policies, ReferenceGrant, injection label) instead of deleting it, the namespace belongs to the admin
 - [x] All chapters: cleanup sections without the `default`-namespace steps
-- [x] New section "A second terminal tab" in user chapter 01: the traffic loops run in a second tab, which needs `source scripts/workshop-env.sh` again. All "new terminal" hints link there
+- [x] New section "A second terminal tab" in user chapter 01: the traffic loops run in a second tab, which needs `source user-scripts/workshop-env.sh` again. All "new terminal" hints link there
 - [x] README: workshop flow (admin → users), links to `admin-chapters/` and `user-chapters/`. Update CLAUDE.md (directories, namespace conventions, scripts)
 - [x] The cloned repository does **not** survive a terminal restart: HOME (`/home/user`) is on the container's overlay filesystem. Chapter 1's "clone it again if it's gone" is right
 - [ ] Users clone `main`: merge `workshop-multiuser` before the first workshop, or add `-b workshop-multiuser` to the clone command for testing
@@ -195,7 +195,7 @@ user-chapters/
 
 ## 3. Teardown scripts
 
-### 3.1 `scripts/cleanup-users.sh` (admin)
+### 3.1 `admin-scripts/cleanup-users.sh` (admin)
 
 Removes everything `setup-users.sh` created, **not** the mesh infrastructure. It finds objects by label, not by detecting users again, so users removed from the IdP in the meantime are cleaned up too.
 
@@ -209,7 +209,7 @@ Removes everything `setup-users.sh` created, **not** the mesh infrastructure. It
 - [x] With a user list, only their namespaces and ClusterRoles/Bindings go and they are removed from the Group; the shared objects stay. Without a list, everything labelled `servicemesh-workshop/user` or `servicemesh-workshop/shared=true` (namespace, Group, ClusterRole/Binding, Role/RoleBinding in any namespace) is deleted
 - [x] Tested on the cluster with stand-in objects (two fake users, a shared namespace, Group, Role/RoleBinding): partial run, full run and a second run on an empty cluster. Still to test after `setup-users.sh` has run for real (Web Terminal DevWorkspaces in `<u>-terminal`, waypoints in `<u>-apps`)
 
-### 3.2 `scripts/cleanup.sh` (platform)
+### 3.2 `admin-scripts/cleanup.sh` (platform)
 
 - [x] Step 1: call `cleanup-users.sh -y` first (ambient namespaces should be removed before Istio goes away). Replace the removal of `servicemesh-apps`/`servicemesh-sidecar` and the `curl-test` pod in `default` with it
 - [x] Step 7 deletes all Web Terminal DevWorkspaces (`console.openshift.io/terminal=true`) while the controller still runs, then the `web-terminal` templates and Subscription. The DevWorkspace Operator is removed only if the `servicemesh-workshop/devworkspace-operator=installed` annotation is set **and** no other DevWorkspaces remain (Dev Spaces uses it too)
@@ -218,7 +218,7 @@ Removes everything `setup-users.sh` created, **not** the mesh infrastructure. It
 - [x] The idle timeout needs no revert: the patched template is deleted together with the operator
 - [ ] **Not tested yet** on the cluster (the run was blocked). Test: open a terminal, run `cleanup.sh`, check that no `devfile` webhooks/CRDs are left and that `oc exec` still works, then reinstall the Web Terminal
 
-### 3.3 Optional: `scripts/reset-my-namespaces.sh` (user)
+### 3.3 Optional: `user-scripts/reset-my-namespaces.sh` (user)
 
 - [ ] Lets a user reset their own namespaces mid-workshop (delete all workshop resources, remove the onboarding labels) without the admin
 

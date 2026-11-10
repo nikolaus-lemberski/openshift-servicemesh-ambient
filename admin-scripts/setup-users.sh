@@ -2,7 +2,7 @@
 # Sets up the workshop users: namespaces, RBAC and the Web Terminal tools. Run as cluster-admin after install.sh.
 # Idempotent, re-run it with a user name to add a late user.
 #
-# Usage: ./scripts/setup-users.sh [-y] [user ...]
+# Usage: ./admin-scripts/setup-users.sh [-y] [user ...]
 #   Without user names, the users are detected (WORKSHOP_USERS, Keycloak realm import, htpasswd, User objects)
 set -euo pipefail
 
@@ -121,7 +121,7 @@ fi
 # Step 1: Platform values for the users
 # ----------------------------------------------------------------------------
 info "Step 1: Reading the platform settings ..."
-oc get istio default &>/dev/null || fail "Istio 'default' not found. Run ./scripts/install.sh first."
+oc get istio default &>/dev/null || fail "Istio 'default' not found. Run ./admin-scripts/install.sh first."
 # Istio.spec.version can be an alias like v1.31-latest, the IstioRevision has the resolved version
 ISTIO_VERSION=${ISTIO_VERSION:-$(oc get istiorevision -o jsonpath='{.items[0].spec.version}')}
 ISTIO_VERSION=${ISTIO_VERSION#v}
@@ -446,5 +446,5 @@ info "Kiali:    ${KIALI_URL}"
 info "Users open the Web Terminal in project <user>-terminal and run:"
 REPO_URL=$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null | sed 's#^git@github.com:#https://github.com/#')
 echo "  git clone ${REPO_URL}"
-echo "  cd $(basename "$REPO_URL" .git) && source scripts/workshop-env.sh"
+echo "  cd $(basename "$REPO_URL" .git) && source user-scripts/workshop-env.sh"
 echo ""

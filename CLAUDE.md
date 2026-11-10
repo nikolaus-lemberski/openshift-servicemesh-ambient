@@ -36,7 +36,8 @@ service-c has two versions (v1, v2) and crash/repair endpoints for resilience de
 - `admin-chapters/` — instructions for the workshop admin (installation, user setup, teardown), one numbered Markdown file per chapter
 - `user-chapters/` — instructions for the workshop users (getting started, chapters 2–10)
 - `assets/img/` - images used in the instructions
-- `scripts/` — `install.sh`/`cleanup.sh` (platform), `setup-users.sh`/`cleanup-users.sh` (workshop users), `workshop-env.sh` (sourced by users in the Web Terminal)
+- `admin-scripts/` — `install.sh`/`cleanup.sh` (platform), `setup-users.sh`/`cleanup-users.sh` (workshop users), run by the admin
+- `user-scripts/` — `workshop-env.sh` (sourced by users in the Web Terminal)
 - `k8s/istio/` — Istio, IstioCNI, ztunnel CRs (kustomize)
 - `k8s/apps/` — app deployments, service accounts, pod monitors, route (kustomize, no namespace)
 - `k8s/apps_gateway_waypoint/` — Gateway, HTTPRoute, waypoint proxy

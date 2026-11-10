@@ -2,7 +2,7 @@
 # Removes what setup-users.sh created: the user namespaces (with everything the users deployed), the RBAC and the
 # tools server. The mesh, the Web Terminal Operator and the User/Identity objects stay.
 #
-# Usage: ./scripts/cleanup-users.sh [-y] [user ...]
+# Usage: ./admin-scripts/cleanup-users.sh [-y] [user ...]
 #   Without user names, all workshop users and the shared objects are removed
 set -uo pipefail
 
