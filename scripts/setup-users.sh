@@ -257,6 +257,37 @@ if oc get namespace perses-dev &>/dev/null; then
     oc create rolebinding "servicemesh-workshop-${role}" -n perses-dev --clusterrole="$role" --group="$GROUP" \
       --dry-run=client -o yaml | oc label --local -f - servicemesh-workshop/shared=true -o yaml | oc apply -f -
   done
+  # The console only offers dashboards from projects the user can see, the monitoring role has no "get namespaces"
+  oc apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: servicemesh-workshop-perses-namespace
+  namespace: perses-dev
+  labels:
+    servicemesh-workshop/shared: "true"
+rules:
+- apiGroups: [""]
+  resources: [namespaces]
+  resourceNames: [perses-dev]
+  verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: servicemesh-workshop-perses-namespace
+  namespace: perses-dev
+  labels:
+    servicemesh-workshop/shared: "true"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: servicemesh-workshop-perses-namespace
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: ${GROUP}
+EOF
 else
   warn "Namespace perses-dev not found, skipping the Perses access"
 fi
@@ -396,6 +427,7 @@ check get pods --subresource=log -n ztunnel
 check create pods --subresource=portforward -n ztunnel
 check get daemonsets.apps -n ztunnel
 check get prometheuses.monitoring.coreos.com/k8s --subresource=api -n openshift-monitoring
+check list persesdashboards.perses.dev -n perses-dev
 (( missing == 0 )) && ok "All permissions in place" || warn "${missing} permission checks failed"
 
 # ============================================================================

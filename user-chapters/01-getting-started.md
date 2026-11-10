@@ -56,7 +56,7 @@ oc projects
 istioctl version --remote=false
 ```
 
-You should see your three namespaces and the `istioctl` client version.
+You should see your three namespaces, the shared project `perses-dev` with the dashboards (read-only) and the `istioctl` client version.
 
 > [!WARNING]
 > If the Web Terminal restarts (e.g. after a long break), the variables and the installed tools are gone. Go back to the repository with `cd openshift-servicemesh-ambient` (clone it again if it's gone) and run `source scripts/workshop-env.sh`. What you've deployed in your namespaces stays.

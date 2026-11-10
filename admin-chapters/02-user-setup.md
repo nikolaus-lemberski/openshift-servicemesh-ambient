@@ -24,7 +24,7 @@ The script creates this RBAC:
 | Group `servicemesh-workshop-users`                           | all users                   | Subject of the shared bindings below                                                        |
 | Role/RoleBinding `servicemesh-workshop-ztunnel`              | namespace `ztunnel`         | ztunnel logs (chapter 3) and `istioctl ztunnel-config` (chapter 4)                          |
 | ClusterRole + ClusterRoleBinding `servicemesh-workshop-monitoring-view` | cluster          | Metrics and Perses dashboards, the L4 metrics come from the `ztunnel` namespace. Like `cluster-monitoring-view`, but without `get namespaces`, so users only see their own projects |
-| RoleBindings to the Perses viewer roles                      | namespace `perses-dev`      | Read the Perses dashboards and datasources                                                  |
+| RoleBindings to the Perses viewer roles, Role/RoleBinding `servicemesh-workshop-perses-namespace` | namespace `perses-dev` | Read the Perses dashboards and datasources. The console only offers dashboards from projects the user can see, so users get `get` on the namespace `perses-dev` |
 
 > [!NOTE]
 > With the namespace permission, users could change other labels of their two app namespaces as well, e.g. the Pod Security labels. For a workshop that's acceptable.

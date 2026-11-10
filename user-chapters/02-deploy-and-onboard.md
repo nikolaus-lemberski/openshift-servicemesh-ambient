@@ -153,7 +153,7 @@ In the OpenShift console UI, open
 Observe -> Dashboards (Perses)
 ```
 
-Explore the provided dashboards like *Istio Ztunnel Dashboard* or *Istio Service Dashboard* and you can see the TCP traffic. The dashboards show the whole mesh, select your namespace `<user>-apps` (or your workloads) in the dashboard variables at the top.
+The dashboards are in the project `perses-dev`. Explore the provided dashboards like *Istio Ztunnel Dashboard* or *Istio Service Dashboard* and you can see the TCP traffic. The dashboards show the whole mesh, select your namespace `<user>-apps` (or your workloads) in the dashboard variables at the top.
 
 ![Perses Dashboard](../assets/img/5-perses.png)
 
