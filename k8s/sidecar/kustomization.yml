@@ -1,17 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Reuses the app manifests from k8s/apps. The namespace transformer also renames
-# the Namespace resource from servicemesh-apps to servicemesh-sidecar.
-namespace: servicemesh-sidecar
+# Reuses the app manifests from k8s/apps, applied with: oc apply -k k8s/sidecar -n $SIDECAR_NS
+# The numbered files are applied separately with envsubst.
 
 resources:
 - ../apps
-
-patches:
-- target:
-    kind: Namespace
-  patch: |-
-    - op: add
-      path: /metadata/labels/istio-injection
-      value: enabled

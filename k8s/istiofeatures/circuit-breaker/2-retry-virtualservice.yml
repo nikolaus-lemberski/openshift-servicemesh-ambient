@@ -2,7 +2,6 @@ apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
   name: service-c-retry
-  namespace: servicemesh-apps
 spec:
   hosts:
   - service-c

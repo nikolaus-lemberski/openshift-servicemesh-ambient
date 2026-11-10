@@ -12,7 +12,7 @@ graph LR
 
 ## How it is configured
 
-We already configured tracing during the [installation](01-installation.md#distributed-tracing). Two resources are important.
+We already configured tracing during the [installation](../admin-chapters/01-installation.md#distributed-tracing). Two resources are important.
 
 The `Istio` resource registers the OpenTelemetry collector as tracing provider (`k8s/tracing/istio-update.yml`):
 

@@ -2,7 +2,6 @@ apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
   name: service-c-circuit-breaker
-  namespace: servicemesh-apps
 spec:
   host: service-c
   trafficPolicy:

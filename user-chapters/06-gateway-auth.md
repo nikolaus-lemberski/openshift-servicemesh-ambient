@@ -1,6 +1,6 @@
 # 6. Authentication and Authorization on the Gateway
 
-So far, every external user can call our apps through the Gateway. Now we protect the Gateway with **JWT authentication** using Keycloak as OIDC identity provider (installed in the namespace `servicemesh-keycloak`, see [Installation](01-installation.md#keycloak-oidc-identity-provider)) and add **role-based authorization** on top. Both are enforced by the Gateway proxy — the apps don't need to know anything about tokens.
+So far, every external user can call our apps through the Gateway. Now we protect the Gateway with **JWT authentication** using Keycloak as OIDC identity provider (installed in the namespace `servicemesh-keycloak`, see [Installation](../admin-chapters/01-installation.md#keycloak-oidc-identity-provider)) and add **role-based authorization** on top. Both are enforced by the Gateway proxy — the apps don't need to know anything about tokens.
 
 ```mermaid
 sequenceDiagram

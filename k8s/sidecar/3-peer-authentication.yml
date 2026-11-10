@@ -2,7 +2,7 @@ apiVersion: security.istio.io/v1
 kind: PeerAuthentication
 metadata:
   name: strict-mtls
-  namespace: servicemesh-sidecar
+  namespace: ${SIDECAR_NS}
 spec:
   mtls:
     mode: STRICT

@@ -2,7 +2,6 @@ apiVersion: security.istio.io/v1
 kind: RequestAuthentication
 metadata:
   name: apps-gateway-jwt
-  namespace: servicemesh-apps
 spec:
   targetRefs:
   - group: gateway.networking.k8s.io

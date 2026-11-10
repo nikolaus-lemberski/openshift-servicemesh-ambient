@@ -2,7 +2,7 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: service-c-allow
-  namespace: servicemesh-sidecar
+  namespace: ${SIDECAR_NS}
 spec:
   selector:
     matchLabels:
@@ -12,4 +12,4 @@ spec:
   - from:
     - source:
         principals:
-        - cluster.local/ns/servicemesh-apps/sa/service-b
+        - cluster.local/ns/${APPS_NS}/sa/service-b

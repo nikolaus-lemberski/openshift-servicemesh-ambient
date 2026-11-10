@@ -43,6 +43,7 @@ The chapters ask users to **label their own namespaces** (`istio.io/dataplane-mo
 - Remove `namespace:` and `ns.yml` from `k8s/apps/kustomization.yml` (the namespace already exists).
 - Cross-namespace references become variables and are applied with `envsubst` (chapter 6 already does this for `${KEYCLOAK_HOST}`):
   - SPIFFE principals `cluster.local/ns/${APPS_NS}/sa/service-b|waypoint` (l4-authz, sidecar 4 + 5)
+  - `metadata.namespace: ${SIDECAR_NS}` for the policies that live in the sidecar namespace (sidecar 1, 3, 4, 5)
   - HTTPRoute backendRef `namespace: ${SIDECAR_NS}` (sidecar 2), ReferenceGrant `from.namespace: ${APPS_NS}` (sidecar 1)
 - `k8s/sidecar/kustomization.yml` doesn't set a namespace anymore. It just reuses `../apps` and gets applied with `oc apply -k k8s/sidecar -n $SIDECAR_NS`. The `istio-injection` label moves from the Namespace patch to an `oc label` step in chapter 10.
 - Gateway `allowedRoutes.namespaces.from: All` → `Same`, so that users can't attach routes to each other's gateways.
@@ -130,10 +131,14 @@ Prerequisite: the manifest changes (see design decisions) are done first, becaus
 
 ### 2.1 Manifests
 
-- [ ] Remove hard-coded namespaces, introduce `${APPS_NS}`/`${SIDECAR_NS}` where references cross namespaces (see design)
-- [ ] `k8s/apps/kustomization.yml` without `ns.yml`/`namespace:`. Delete `k8s/apps/ns.yml` (no single-user mode anymore)
-- [ ] `k8s/sidecar` reworked (no Namespace patch)
-- [ ] Gateway `allowedRoutes` → `Same`
+- [x] Remove hard-coded namespaces, introduce `${APPS_NS}`/`${SIDECAR_NS}` where references cross namespaces (see design)
+  - Files in `k8s/apps_gateway_waypoint` and `k8s/istiofeatures` have no `metadata.namespace` and go to the current project. Only `l4-authz` needs `envsubst` (principal), plus `gateway-auth/1` as before (`KEYCLOAK_HOST`)
+  - `k8s/sidecar/1`, `3`, `4`, `5` live in the sidecar namespace and keep `metadata.namespace: ${SIDECAR_NS}`, so they land there while the current project is `$APPS_NS`. All numbered sidecar files are applied with `envsubst`. Don't add `-n` to these `oc apply` commands, `oc` rejects a `-n` that differs from the manifest
+  - ReferenceGrant renamed `allow-servicemesh-apps` → `allow-apps-namespace`
+- [x] `k8s/apps/kustomization.yml` without `ns.yml`/`namespace:`. Deleted `k8s/apps/ns.yml` (no single-user mode anymore)
+- [x] `k8s/sidecar` reworked (no Namespace patch, only `../apps`)
+- [x] Gateway `allowedRoutes` → `Same`
+- Checked with `oc kustomize` and an `envsubst` + YAML parse of every file. A server-side dry run of the Istio kinds needs the mesh CRDs. The chapters still show the old commands until 2.4
 
 ### 2.2 Directory layout
 
@@ -149,19 +154,19 @@ user-chapters/
   02-deploy-and-onboard.md … 10-sidecar-interop.md   # was chapters/02–10
 ```
 
-- [ ] `git mv` the chapters (keeps the history). Both directories sit at the same depth as `chapters/`, so the `../assets/img/...` image links keep working
-- [ ] Previous/next navigation stays within each directory. The last admin chapter links to "hand over to the users: `user-chapters/01-getting-started.md`", and user chapter 01 says "your admin has done `admin-chapters/`"
-- [ ] Each directory gets a short intro block at the top of its first chapter: who this is for, which rights are needed (cluster-admin vs. workshop user)
+- [x] `git mv` the chapters (keeps the history). Both directories sit at the same depth as `chapters/`, so the `../assets/img/...` image links keep working
+- [x] Previous/next navigation stays within each directory. The last admin chapter links to "hand over to the users: `user-chapters/01-getting-started.md`", and user chapter 01 says "your admin has done `admin-chapters/`"
+- [x] Each directory gets a short intro block at the top of its first chapter: who this is for, which rights are needed (cluster-admin vs. workshop user)
 
 ### 2.3 Admin chapters
 
-- [ ] `admin-chapters/01-installation.md`: add the Web Terminal Operator + idle timeout. Remove anything that's user work
-- [ ] `admin-chapters/02-user-setup.md`: how detection works, what RBAC is created and why (table), running `setup-users.sh`, how to verify (`oc auth can-i --as=user1 …`), how to add a late user (re-run the script with the user name)
-- [ ] `admin-chapters/03-teardown.md`: `cleanup-users.sh` between workshop runs, `cleanup.sh` to remove everything (section 3)
+- [x] `admin-chapters/01-installation.md`: add the Web Terminal Operator + idle timeout. Remove anything that's user work (there was none, the chapter only had admin steps)
+- [x] `admin-chapters/02-user-setup.md`: how detection works, what RBAC is created and why (table), running `setup-users.sh`, how to verify (`oc auth can-i --as=user1 …`), how to add a late user (re-run the script with the user name)
+- [x] `admin-chapters/03-teardown.md`: `cleanup-users.sh` between workshop runs, `cleanup.sh` to remove everything (section 3)
 
 ### 2.4 User chapters
 
-- [ ] New `user-chapters/01-getting-started.md`: log in to the console as `userN`, open the Web Terminal (**select project `<u>-terminal`**), `git clone https://github.com/nikolaus-lemberski/openshift-servicemesh-ambient.git`, `cd`, `source scripts/workshop-env.sh`, check with `oc project`/`oc get ns`. Explain the three namespaces. Note on terminal restarts (re-source the env).
+- [x] New `user-chapters/01-getting-started.md`: log in to the console as `userN`, open the Web Terminal (**select project `<u>-terminal`**), `git clone https://github.com/nikolaus-lemberski/openshift-servicemesh-ambient.git`, `cd`, `source scripts/workshop-env.sh`, check with `oc project`/`oc get ns`. Explain the three namespaces. Note on terminal restarts (re-source the env).
 - [ ] Chapters 02–10: replace `servicemesh-apps` → `$APPS_NS`, `servicemesh-sidecar` → `$SIDECAR_NS` in commands. YAML snippets show `${APPS_NS}` where it matters. Kiali/console steps: "select your namespace `<u>-apps`"
 - [ ] Ch. 2: remove `ns.yml`/namespace creation, keep the onboarding label step (users now have the permission). Metrics/Perses: filter by own namespace
 - [ ] Ch. 3: the "outside the mesh" test runs directly from the Web Terminal (`curl http://service-c.$APPS_NS:8080/health`), the `curl-test` pod stays only in `$APPS_NS`. The ztunnel logs step: grep for the user's own namespace
@@ -169,9 +174,11 @@ user-chapters/
 - [ ] Ch. 5: mention that tracing config (`Telemetry`, `istio-update`) is mesh-wide and done by the admin. Search traces by `service.name` / `waypoint.$APPS_NS`
 - [ ] Ch. 6: `KEYCLOAK_HOST` from `workshop-env.sh` instead of `ingresses.config/cluster`. The Keycloak realm `servicemesh` (testuser/adminuser) is shared, which is fine
 - [ ] Ch. 7–9: namespace replacements only. `oc port-forward` works inside the terminal
-- [ ] Ch. 10: add an `oc label namespace $SIDECAR_NS istio-injection=enabled` step + `oc apply -k k8s/sidecar -n $SIDECAR_NS`. `envsubst` for files 1, 2, 4, 5
+- [ ] Ch. 10: add an `oc label namespace $SIDECAR_NS istio-injection=enabled` step + `oc apply -k k8s/sidecar -n $SIDECAR_NS`. `envsubst` for files 1–5
 - [ ] All chapters: cleanup sections without the `default`-namespace steps
-- [ ] README: workshop flow (admin → users), links to `admin-chapters/` and `user-chapters/`. Update CLAUDE.md (directories, namespace conventions, scripts)
+- [x] README: workshop flow (admin → users), links to `admin-chapters/` and `user-chapters/`. Update CLAUDE.md (directories, namespace conventions, scripts)
+- [ ] Check during the smoke test: does the cloned repository survive a Web Terminal restart (idle stop)? Chapter 1 currently says "clone it again if it's gone"
+- [ ] Users clone `main`: merge `workshop-multiuser` before the first workshop, or add `-b workshop-multiuser` to the clone command for testing
 - [ ] Screenshots show `servicemesh-apps`. Leave them (add a note) or retake them later
 
 ---

@@ -170,4 +170,4 @@ and open for example the `service-c-v1` deployment, you will find a *Service Mes
 
 ---
 
-[← 1. Installation](01-installation.md) | [Overview](../README.md) | [3. L4 Security →](03-l4-security.md)
+[← 1. Getting Started](01-getting-started.md) | [Overview](../README.md) | [3. L4 Security →](03-l4-security.md)

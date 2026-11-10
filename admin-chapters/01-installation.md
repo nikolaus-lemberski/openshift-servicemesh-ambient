@@ -1,5 +1,8 @@
 # 1. Installation
 
+> [!IMPORTANT]
+> **The admin chapters are for the workshop admin**, who needs `cluster-admin` rights. The admin installs the platform once (this chapter), sets up the workshop users ([2. Workshop Users](02-user-setup.md)) and removes everything afterwards ([3. Teardown](03-teardown.md)). The workshop users start with [user-chapters/01-getting-started.md](../user-chapters/01-getting-started.md).
+
 Tested versions: **OpenShift 4.22** and **Red Hat OpenShift Service Mesh 3.5** (Istio 1.31, Kiali 2.33). OpenShift Service Mesh 3.5 needs OpenShift 4.20 or later.
 
 ## Architecture Overview
@@ -73,7 +76,7 @@ Make sure you are logged in to your **OpenShift cluster** as an **administrator*
 
 Run the script (and all other commands of the workshop) from the root directory of this repository.
 
-After the script has completed, move on to [2. Deploy and Onboard the Apps](02-deploy-and-onboard.md).
+After the script has completed, move on to [2. Workshop Users](02-user-setup.md).
 
 ## Install the operators
 
@@ -88,8 +91,18 @@ oc apply -f k8s/operators/subscriptions.yml
 * Tempo Operator
 * Red Hat build of OpenTelemetry
 * Cluster Observability Operator
+* Web Terminal (pulls in the DevWorkspace Operator), the users work in the Web Terminal of the OpenShift console
 
 The Red Hat build of Keycloak operator is installed later in its own namespace, see [Keycloak](#keycloak-oidc-identity-provider).
+
+A Web Terminal stops after 15 minutes without input, which is too short for a workshop day. Raise the idle timeout to 4 hours once the Web Terminal Operator is installed. The `unmanaged-state` annotation keeps the operator from reverting the change:
+
+```bash
+until oc get devworkspacetemplate web-terminal-exec -n openshift-operators &>/dev/null; do sleep 5; done
+oc annotate devworkspacetemplate web-terminal-exec -n openshift-operators web-terminal.redhat.com/unmanaged-state=true --overwrite
+oc patch devworkspacetemplate web-terminal-exec -n openshift-operators --type=json \
+  -p='[{"op":"replace","path":"/spec/components/0/container/env/0/value","value":"4h"}]'
+```
  
 ## Install Istio
 
@@ -308,7 +321,7 @@ oc get secret keycloak-initial-admin -n servicemesh-keycloak -o jsonpath='{.data
 
 ## Congratulations, you're done!
 
-You've installed all operators and setup Service Mesh. Now move on to [2. Deploy and Onboard the Apps](02-deploy-and-onboard.md).
+You've installed all operators and setup Service Mesh. Now move on to [2. Workshop Users](02-user-setup.md).
 
 ## SeaweedFS instead of ODF
 
@@ -336,4 +349,4 @@ export AWS_SECRET_ACCESS_KEY="tempostorage"
 
 ---
 
-[Overview](../README.md) | [2. Deploy and Onboard the Apps →](02-deploy-and-onboard.md)
+[Overview](../README.md) | [2. Workshop Users →](02-user-setup.md)
