@@ -23,17 +23,21 @@ We use two Istio resources, both attached to the Gateway with `targetRefs`:
 
 ## Preparation — get tokens from Keycloak
 
-If you're in a new terminal, set the `ROUTE` variable again:
+If you're in a new terminal tab, load the environment ([Getting Started](01-getting-started.md#a-second-terminal-tab)) and set the `ROUTE` variable again:
 
 ```bash
-export ROUTE="https://$(oc get route -n servicemesh-apps apps-gateway -o jsonpath='{.spec.host}')"
+export ROUTE="https://$(oc get route -n $APPS_NS apps-gateway -o jsonpath='{.spec.host}')"
 ```
 
-Keycloak has a realm `servicemesh` with two users: `testuser` (realm role `user`) and `adminuser` (realm roles `user` and `admin`). Define a small helper to get a token for a user (requires `jq`):
+Keycloak has a realm `servicemesh` with two users: `testuser` (realm role `user`) and `adminuser` (realm roles `user` and `admin`). All workshop users share this realm, you only read tokens from it. `workshop-env.sh` has set the Keycloak host name in `KEYCLOAK_HOST`:
 
 ```bash
-export KEYCLOAK_HOST="keycloak.$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')"
+echo $KEYCLOAK_HOST
+```
 
+Define a small helper to get a token for a user:
+
+```bash
 get_token() {
   curl -s -X POST "https://${KEYCLOAK_HOST}/realms/servicemesh/protocol/openid-connect/token" \
     -d grant_type=password -d client_id=servicemesh-app -d client_secret=servicemesh-app-secret \
@@ -71,7 +75,7 @@ spec:
 Apply it (the issuer contains the cluster domain, so we use `envsubst`):
 
 ```bash
-envsubst < k8s/istiofeatures/gateway-auth/1-request-authentication.yml | oc apply -f -
+envsubst < k8s/istiofeatures/gateway-auth/1-request-authentication.yml | oc apply -n $APPS_NS -f -
 ```
 
 Wait a few seconds for the configuration to reach the Gateway, then test:
@@ -107,7 +111,7 @@ spec:
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/gateway-auth/2-authorization-policy-require-jwt.yml
+oc apply -f k8s/istiofeatures/gateway-auth/2-authorization-policy-require-jwt.yml -n $APPS_NS
 ```
 
 Test again:
@@ -136,7 +140,7 @@ Authentication answers *who are you?* — authorization answers *what are you al
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/gateway-auth/3-authorization-policy-require-admin.yml
+oc apply -f k8s/istiofeatures/gateway-auth/3-authorization-policy-require-admin.yml -n $APPS_NS
 ```
 
 Test with both users:
@@ -157,15 +161,15 @@ curl -s -w " [HTTP %{http_code}]\n" -H "Authorization: Bearer $ADMIN_TOKEN" $ROU
 | valid token, `testuser`       | 200                   | 200           | 403                  |
 | valid token, `adminuser`      | 200                   | 200           | 200                  |
 
-You can find both policies in Kiali under *Istio Config* for the namespace `servicemesh-apps`.
+You can find both policies in Kiali under *Istio Config* for your namespace `<user>-apps`.
 
 ## Cleanup
 
 Remove the authorization policy and the request authentication, so the Gateway is open again for the next chapters (Keycloak stays installed):
 
 ```bash
-oc delete -f k8s/istiofeatures/gateway-auth/3-authorization-policy-require-admin.yml
-oc delete -f k8s/istiofeatures/gateway-auth/1-request-authentication.yml
+oc delete -f k8s/istiofeatures/gateway-auth/3-authorization-policy-require-admin.yml -n $APPS_NS
+oc delete -f k8s/istiofeatures/gateway-auth/1-request-authentication.yml -n $APPS_NS
 ```
 
 Verify that requests without a token work again:

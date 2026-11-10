@@ -13,10 +13,10 @@ A canary release lets you roll out a new version of a service gradually, shiftin
 
 ## Preparation — version-specific Services
 
-If you're in a new terminal, set the `ROUTE` variable again:
+If you're in a new terminal tab, load the environment ([Getting Started](01-getting-started.md#a-second-terminal-tab)) and set the `ROUTE` variable again:
 
 ```bash
-export ROUTE="https://$(oc get route -n servicemesh-apps apps-gateway -o jsonpath='{.spec.host}')"
+export ROUTE="https://$(oc get route -n $APPS_NS apps-gateway -o jsonpath='{.spec.host}')"
 ```
 
 The existing `service-c` Service selects **all** pods with `app: service-c` regardless of version. To split traffic we need two additional Services that each select a single version:
@@ -40,7 +40,7 @@ spec:
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/canary/0-service-c-versions.yml
+oc apply -f k8s/istiofeatures/canary/0-service-c-versions.yml -n $APPS_NS
 ```
 
 ## Step 1 — Pin all traffic to v1
@@ -52,7 +52,6 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: service-c-canary
-  namespace: servicemesh-apps
 spec:
   parentRefs:
   - group: ""
@@ -67,7 +66,7 @@ spec:
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/canary/1-httproute-v1.yml
+oc apply -f k8s/istiofeatures/canary/1-httproute-v1.yml -n $APPS_NS
 ```
 
 Verify that everything still works:
@@ -105,13 +104,13 @@ spec:
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/canary/c-v2-deploy.yml
+oc apply -f k8s/istiofeatures/canary/c-v2-deploy.yml -n $APPS_NS
 ```
 
 Wait for the pod to be ready:
 
 ```bash
-oc rollout status deployment/service-c-v2 -n servicemesh-apps
+oc rollout status deployment/service-c-v2 -n $APPS_NS
 ```
 
 The v2 pod also matches the selector of `service-c` (`app: service-c`). Without our `HTTPRoute`, it would get traffic right away. But the HTTPRoute still sends 100 % of traffic to v1. Confirm by generating some requests:
@@ -138,7 +137,7 @@ Start small — send 10 % of requests to v2 while keeping 90 % on v1. Only the `
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/canary/2-httproute-90-10.yml
+oc apply -f k8s/istiofeatures/canary/2-httproute-90-10.yml -n $APPS_NS
 ```
 
 Generate traffic and observe the version in the responses:
@@ -147,7 +146,7 @@ Generate traffic and observe the version in the responses:
 while true; do curl $ROUTE; sleep 2; done
 ```
 
-Roughly 1 in 10 requests should now show `v2`. Check Kiali for a visual split:
+Roughly 1 in 10 requests should now show `v2`. Check Kiali (your namespace `<user>-apps`) for a visual split:
 
 ```text
 Service Mesh -> Traffic Graph -> Display -> Check "Traffic Distribution"
@@ -169,7 +168,7 @@ If v2 looks healthy, increase the canary to 50/50:
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/canary/3-httproute-50-50.yml
+oc apply -f k8s/istiofeatures/canary/3-httproute-50-50.yml -n $APPS_NS
 ```
 
 You should see an even mix of `v1` and `v2` responses.
@@ -187,7 +186,7 @@ Once you're confident, send 100 % of traffic to v2:
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/canary/4-httproute-v2.yml
+oc apply -f k8s/istiofeatures/canary/4-httproute-v2.yml -n $APPS_NS
 ```
 
 All responses should now show `v2`.
@@ -197,9 +196,9 @@ All responses should now show `v2`.
 Remove the canary HTTPRoute, the version-specific Services and the v2 Deployment:
 
 ```bash
-oc delete -f k8s/istiofeatures/canary/4-httproute-v2.yml
-oc delete -f k8s/istiofeatures/canary/0-service-c-versions.yml
-oc delete -f k8s/istiofeatures/canary/c-v2-deploy.yml
+oc delete -f k8s/istiofeatures/canary/4-httproute-v2.yml -n $APPS_NS
+oc delete -f k8s/istiofeatures/canary/0-service-c-versions.yml -n $APPS_NS
+oc delete -f k8s/istiofeatures/canary/c-v2-deploy.yml -n $APPS_NS
 ```
 
 Traffic returns to the original `service-c` Service, which now only has the v1 pod behind it.

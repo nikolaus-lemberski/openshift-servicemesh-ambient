@@ -63,13 +63,25 @@ You should see your three namespaces and the `istioctl` client version.
 
 ## Run the commands
 
-Run all commands of the workshop from the root directory of the repository in the Web Terminal. Many manifests contain variables like `${APPS_NS}`. The chapters apply them with `envsubst`, which replaces the variables with your values:
+Run all commands of the workshop from the root directory of the repository in the Web Terminal. Some manifests contain variables like `${APPS_NS}`. The chapters apply them with `envsubst`, which replaces the variables with your values:
 
 ```bash
 envsubst < k8s/... | oc apply -f -
 ```
 
 Kiali and the OpenShift console only list the namespaces you have access to. Select your own namespace there, e.g. `user1-apps`.
+
+> [!NOTE]
+> The screenshots were taken in a single-user setup with the namespace `servicemesh-apps`. You see your own namespace `<user>-apps` instead.
+
+## A second terminal tab
+
+Some chapters generate traffic in a loop while you work on. Open a second tab with the **+** in the terminal window. A new tab is a new shell: the tools are there, but the variables aren't. Load the environment in the new tab as well:
+
+```bash
+cd openshift-servicemesh-ambient
+source scripts/workshop-env.sh
+```
 
 ---
 

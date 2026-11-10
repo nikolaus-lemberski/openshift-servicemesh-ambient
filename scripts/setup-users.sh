@@ -201,6 +201,9 @@ rules:
 - apiGroups: [""]
   resources: [pods/portforward]
   verbs: [create]
+- apiGroups: [apps]
+  resources: [daemonsets]
+  verbs: [get, list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -218,17 +221,30 @@ subjects:
   kind: Group
   name: ${GROUP}
 ---
-# The L4 metrics live in the ztunnel namespace and the Perses dashboards query across namespaces
+# The L4 metrics live in the ztunnel namespace and the Perses dashboards query across namespaces.
+# Like cluster-monitoring-view, but without "get namespaces": users only see their own projects
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: servicemesh-workshop-monitoring-view
+  labels:
+    servicemesh-workshop/shared: "true"
+rules:
+- apiGroups: [monitoring.coreos.com]
+  resources: [prometheuses/api]
+  resourceNames: [k8s]
+  verbs: [get, create]
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: servicemesh-workshop-cluster-monitoring-view
+  name: servicemesh-workshop-monitoring-view
   labels:
     servicemesh-workshop/shared: "true"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: cluster-monitoring-view
+  name: servicemesh-workshop-monitoring-view
 subjects:
 - apiGroup: rbac.authorization.k8s.io
   kind: Group
@@ -376,8 +392,10 @@ check patch "namespace/${u}-apps"
 check patch "namespace/${u}-sidecar"
 check create devworkspaces.workspace.devfile.io -n "${u}-terminal"
 check get configmap/workshop-info -n "${u}-terminal"
-check get pods/log -n ztunnel
-check create pods/portforward -n ztunnel
+check get pods --subresource=log -n ztunnel
+check create pods --subresource=portforward -n ztunnel
+check get daemonsets.apps -n ztunnel
+check get prometheuses.monitoring.coreos.com/k8s --subresource=api -n openshift-monitoring
 (( missing == 0 )) && ok "All permissions in place" || warn "${missing} permission checks failed"
 
 # ============================================================================

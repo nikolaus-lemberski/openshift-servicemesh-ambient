@@ -7,30 +7,28 @@ Before we move to L7 with waypoint proxies, let's demonstrate what the ztunnel c
 | Strict mTLS    | `PeerAuthentication`  | ztunnel     | Is the connection mTLS (HBONE)?       |
 | Authorization  | `AuthorizationPolicy` | ztunnel     | SPIFFE identity of the caller         |
 
-## Preparation — curl test pods
+## Preparation — two clients
 
-If you're in a new terminal, set the `ROUTE` variable again:
+If you're in a new terminal tab, load the environment ([Getting Started](01-getting-started.md#a-second-terminal-tab)) and set the `ROUTE` variable again:
 
 ```bash
-export ROUTE="https://$(oc get route -n servicemesh-apps service-a -o jsonpath='{.spec.host}')"
+export ROUTE="https://$(oc get route -n $APPS_NS service-a -o jsonpath='{.spec.host}')"
 ```
 
-Start a temporary curl pod in the `default` namespace (which is NOT enrolled in the mesh) and one in `servicemesh-apps` (which IS in the mesh):
+We call service-c from two clients:
+
+- **Outside the mesh:** your Web Terminal. It runs in `<user>-terminal`, which is not enrolled in the mesh.
+- **Inside the mesh:** a temporary curl pod in `<user>-apps`.
+
+Start the curl pod and wait until it's running:
 
 ```bash
-oc run curl-test -n default --image=curlimages/curl --restart=Never -- sleep 3600
-oc run curl-test -n servicemesh-apps --image=curlimages/curl --restart=Never -- sleep 3600
-```
-
-Wait until both pods are running:
-
-```bash
-oc wait pod/curl-test -n default --for=condition=Ready --timeout=60s
-oc wait pod/curl-test -n servicemesh-apps --for=condition=Ready --timeout=60s
+oc run curl-test -n $APPS_NS --image=curlimages/curl --restart=Never -- sleep 3600
+oc wait pod/curl-test -n $APPS_NS --for=condition=Ready --timeout=60s
 ```
 
 > [!NOTE]
-> You may see a PodSecurity warning for the pod in `servicemesh-apps`. The pod is created anyway.
+> You may see a PodSecurity warning for the pod. The pod is created anyway.
 
 ## Strict mTLS
 
@@ -40,59 +38,57 @@ By default, Istio ambient mode uses *permissive* mTLS: mesh workloads accept bot
 
 ### Step 1 — Permissive mode (default)
 
-The pod in `default` is not in the mesh and sends plain-text HTTP. In permissive mode this is **accepted**:
+Your Web Terminal is not in the mesh and sends plain-text HTTP. In permissive mode this is **accepted**:
 
 ```bash
-oc exec curl-test -n default -- curl -s -m 5 -w "\n" http://service-c.servicemesh-apps:8080/health
+curl -s -m 5 -w "\n" http://service-c.$APPS_NS:8080/health
 ```
 
 ### Step 2 — Enforce strict mTLS
 
-A `PeerAuthentication` with mode `STRICT` in the namespace `servicemesh-apps` tells the ztunnel to accept only mTLS connections for all workloads in this namespace:
+A `PeerAuthentication` with mode `STRICT` in your namespace tells the ztunnel to accept only mTLS connections for all workloads in this namespace:
 
 ```yaml
 apiVersion: security.istio.io/v1
 kind: PeerAuthentication
 metadata:
   name: strict-mtls
-  namespace: servicemesh-apps
 spec:
   mtls:
     mode: STRICT
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/mtls/peer-authentication.yml
+oc apply -f k8s/istiofeatures/mtls/peer-authentication.yml -n $APPS_NS
 ```
 
-**Test from outside the mesh:** The curl pod in `default` still sends plain-text HTTP, so it is now **rejected**:
+**Test from outside the mesh:** The Web Terminal still sends plain-text HTTP, so it is now **rejected**:
 
 ```bash
-oc exec curl-test -n default -- curl -s -m 5 -w "\n" http://service-c.servicemesh-apps:8080/health
+curl -s -m 5 -w "\n" http://service-c.$APPS_NS:8080/health
 ```
 
 The connection is reset because the ztunnel enforces mTLS and rejects plain-text traffic (curl exits with an error).
 
-**Test from inside the mesh:** Now run the same curl from the pod in `servicemesh-apps`. The ztunnel transparently adds mTLS, so the request **succeeds**:
+**Test from inside the mesh:** Now run the same curl from the curl pod in your namespace. The ztunnel transparently adds mTLS, so the request **succeeds**:
 
 ```bash
-oc exec curl-test -n servicemesh-apps -- curl -s -m 5 -w "\n" http://service-c.servicemesh-apps:8080/health
+oc exec curl-test -n $APPS_NS -- curl -s -m 5 -w "\n" http://service-c.$APPS_NS:8080/health
 ```
 
 You should get a healthy response. Neither the curl pod nor service-c knows anything about certificates: the ztunnel provides zero-config mTLS for all enrolled workloads.
 
-| Caller                         | Permissive (default) | STRICT   |
-| ------------------------------ | -------------------- | -------- |
-| curl pod in `default` (no mesh) | allowed              | rejected |
-| curl pod in `servicemesh-apps`  | allowed              | allowed  |
+| Caller                          | Permissive (default) | STRICT   |
+| ------------------------------- | -------------------- | -------- |
+| Web Terminal (no mesh)          | allowed              | rejected |
+| curl pod in `<user>-apps`       | allowed              | allowed  |
 
 ### Cleanup
 
-Remove the strict mTLS policy and the curl pod in `default`. We keep the curl pod in `servicemesh-apps` for the next demo:
+Remove the strict mTLS policy. We keep the curl pod for the next demo:
 
 ```bash
-oc delete -f k8s/istiofeatures/mtls/peer-authentication.yml
-oc delete pod curl-test -n default
+oc delete -f k8s/istiofeatures/mtls/peer-authentication.yml -n $APPS_NS
 ```
 
 ## L4 Authorization Policy
@@ -116,7 +112,6 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: service-c-allow-service-b
-  namespace: servicemesh-apps
 spec:
   selector:
     matchLabels:
@@ -126,13 +121,15 @@ spec:
   - from:
     - source:
         principals:
-        - cluster.local/ns/servicemesh-apps/sa/service-b
+        - cluster.local/ns/${APPS_NS}/sa/service-b
 ```
 
 The policy only uses L4 attributes (the identity of the caller), so the ztunnel can enforce it. Rules with L7 attributes like HTTP paths or headers would need a waypoint proxy.
 
+The principal contains your namespace, so the file has the variable `${APPS_NS}`. `envsubst` replaces it before the policy is applied:
+
 ```bash
-oc apply -f k8s/istiofeatures/l4-authz/authorization-policy.yml
+envsubst < k8s/istiofeatures/l4-authz/authorization-policy.yml | oc apply -n $APPS_NS -f -
 ```
 
 ### Step 2 — Test
@@ -143,10 +140,10 @@ oc apply -f k8s/istiofeatures/l4-authz/authorization-policy.yml
 curl $ROUTE
 ```
 
-**From the curl pod:** The curl pod in `servicemesh-apps` uses the `default` service account, not `service-b`. The ztunnel **denies** the request:
+**From the curl pod:** The curl pod uses the `default` service account, not `service-b`. The ztunnel **denies** the request:
 
 ```bash
-oc exec curl-test -n servicemesh-apps -- curl -s -m 5 -w "\n" http://service-c.servicemesh-apps:8080/health
+oc exec curl-test -n $APPS_NS -- curl -s -m 5 -w "\n" http://service-c.$APPS_NS:8080/health
 ```
 
 The connection is closed by the ztunnel. Only the identity of service-b is allowed to reach service-c.
@@ -154,12 +151,12 @@ The connection is closed by the ztunnel. Only the identity of service-b is allow
 | Caller                              | Identity                  | Result  |
 | ----------------------------------- | ------------------------- | ------- |
 | service-b (call chain via `$ROUTE`) | `.../sa/service-b`        | allowed |
-| curl pod in `servicemesh-apps`      | `.../sa/default`          | denied  |
+| curl pod in `<user>-apps`           | `.../sa/default`          | denied  |
 
-You can also verify in the ztunnel logs that the connection was denied:
+You can also verify in the ztunnel logs that the connection was denied. The ztunnel handles the traffic of all users, so filter for your namespace:
 
 ```bash
-oc logs -n ztunnel -l app=ztunnel --tail=50 | grep "policy rejection"
+oc logs -n ztunnel -l app=ztunnel --tail=200 | grep "policy rejection" | grep $APPS_NS
 ```
 
 ### Cleanup
@@ -167,8 +164,8 @@ oc logs -n ztunnel -l app=ztunnel --tail=50 | grep "policy rejection"
 Remove the authorization policy and the curl pod:
 
 ```bash
-oc delete -f k8s/istiofeatures/l4-authz/authorization-policy.yml
-oc delete pod curl-test -n servicemesh-apps
+oc delete authorizationpolicy service-c-allow-service-b -n $APPS_NS
+oc delete pod curl-test -n $APPS_NS
 ```
 
 ---

@@ -22,18 +22,17 @@ The kustomization in `k8s/apps` creates:
 
 | Resource                                     | Purpose                                                                                                  |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Namespace `servicemesh-apps`                 | Labeled `istio-discovery: enabled` so Istio discovers it, but the namespace is **not** in the mesh yet  |
 | ServiceAccounts `service-a`, `-b`, `-c`      | Every service gets its own identity. The mesh uses it for mTLS and authorization (see chapter 3)         |
 | Deployments and Services                     | service-a, service-b and service-c v1                                                                    |
 | PodMonitor `istio-proxies-monitor`           | Prometheus scrapes the Envoy proxies (Gateway, waypoint) in this namespace. Every mesh namespace needs one |
 | Route `service-a`                            | Exposes service-a. We'll replace it with a Gateway in chapter 4                                         |
 
-Our Istio control plane only watches namespaces with the discovery label (`discoverySelectors` in the `Istio` resource):
+The kustomization has no namespace, it's applied to your namespace `<user>-apps`. Your admin has created it with the discovery label, because our Istio control plane only watches namespaces with this label (`discoverySelectors` in the `Istio` resource):
 
 ```yaml
 kind: Namespace
 metadata:
-  name: servicemesh-apps
+  name: user1-apps   # <user>-apps
   labels:
     istio-discovery: enabled
 ```
@@ -41,13 +40,13 @@ metadata:
 Create the apps:
 
 ```bash
-oc apply -k k8s/apps
+oc apply -k k8s/apps -n $APPS_NS
 ```
 
 Get the route and check if the apps are available.
 
 ```bash
-export ROUTE="https://$(oc get route -n servicemesh-apps service-a -o jsonpath='{.spec.host}')"
+export ROUTE="https://$(oc get route -n $APPS_NS service-a -o jsonpath='{.spec.host}')"
 curl $ROUTE
 ```
 
@@ -72,32 +71,34 @@ We'll use these to explore the Service Mesh features later.
 At the moment, the apps are known to the mesh (because of the label `istio-discovery: enabled` on the namespace), but not onboarded yet. You can verify that by checking the pods (no sidecars, still one container per pod) and the ztunnel:
 
 ```bash
-istioctl ztunnel-config workload -n ztunnel
+istioctl ztunnel-config workload -n ztunnel --workload-namespace $APPS_NS
 ```
+
+`-n ztunnel` tells `istioctl` where the ztunnel runs, `--workload-namespace` shows only your workloads. The ztunnel knows the workloads of all users.
 
 ![Istioctl TCP](../assets/img/1-tcp.png)
 
-The apps in the `servicemesh-apps` namespace are listed, but there's no waypoint proxy and the protocol is **TCP** (should be **HBONE** in ambient mesh).
+Your apps are listed, but there's no waypoint proxy and the protocol is **TCP** (should be **HBONE** in ambient mesh).
 
 In ambient mode we don't inject sidecars or restart pods. Onboarding is a single label on the namespace:
 
 ```yaml
 kind: Namespace
 metadata:
-  name: servicemesh-apps
+  name: user1-apps   # <user>-apps
   labels:
     istio-discovery: enabled
     istio.io/dataplane-mode: ambient   # new
 ```
 
 ```bash
-oc label namespace servicemesh-apps istio.io/dataplane-mode=ambient
+oc label namespace $APPS_NS istio.io/dataplane-mode=ambient
 ```
 
 Istio CNI now redirects the traffic of every pod in the namespace to the ztunnel on its node. The ztunnels talk to each other through **HBONE** tunnels (HTTP-Based Overlay Network Environment), which are encrypted with mTLS. Check the ztunnel again:
 
 ```bash
-istioctl ztunnel-config workload -n ztunnel
+istioctl ztunnel-config workload -n ztunnel --workload-namespace $APPS_NS
 ```
 
 ![Istioctl HBONE](../assets/img/2-hbone.png)
@@ -106,7 +107,7 @@ The protocol switched to **HBONE**. The pods were not restarted and still have a
 
 ## Check Observability
 
-If you check the Kiali Traffic Graph (Kiali console or integrated Kiali console in your OpenShift UI Console), you can see the service calls. As the Kiali traffic graph is built from real traffic, generate some in a second terminal and keep it running:
+If you check the Kiali Traffic Graph (Kiali console or integrated Kiali console in your OpenShift UI Console), you can see the service calls. As the Kiali traffic graph is built from real traffic, generate some in a second terminal tab (see [Getting Started](01-getting-started.md#a-second-terminal-tab)) and keep it running:
 
 ```bash
 while true; do curl $ROUTE; sleep 2; done
@@ -120,7 +121,7 @@ In the OpenShift console UI, open
 Service Mesh -> Traffic Graph 
 ```
 
-Select the `servicemesh-apps` namespace. You see a graph of the traffic that flows through our services. The blue lines mean all traffic is going through our L4 ztunnel. If you activate *Security* in the *Display* menu and click on the new icons on the blue lines you see we have mTLS enabled.
+Select your namespace `<user>-apps`. You see a graph of the traffic that flows through our services. The blue lines mean all traffic is going through our L4 ztunnel. If you activate *Security* in the *Display* menu and click on the new icons on the blue lines you see we have mTLS enabled.
 
 ![Kiali](../assets/img/3-kiali.png)
 
@@ -132,10 +133,10 @@ In the OpenShift console UI, open
 Observe -> Metrics
 ```
 
-Enter the query:
+Enter the query, with your namespace instead of `user1-apps`:
 
 ```text
-istio_tcp_connections_opened_total{destination_workload_namespace="servicemesh-apps"}
+istio_tcp_connections_opened_total{destination_workload_namespace="user1-apps"}
 ```
 
 With the Thanos Querier we can access Istio metrics. The L4 metrics are reported by the ztunnel, so they belong to the `ztunnel` namespace; the labels `source_workload_namespace` and `destination_workload_namespace` tell which workloads are talking to each other.
@@ -152,7 +153,7 @@ In the OpenShift console UI, open
 Observe -> Dashboards (Perses)
 ```
 
-Explore the provided dashboards like *Istio Ztunnel Dashboard* or *Istio Service Dashboard* and you can see the TCP traffic.
+Explore the provided dashboards like *Istio Ztunnel Dashboard* or *Istio Service Dashboard* and you can see the TCP traffic. The dashboards show the whole mesh, select your namespace `<user>-apps` (or your workloads) in the dashboard variables at the top.
 
 ![Perses Dashboard](../assets/img/5-perses.png)
 
@@ -164,7 +165,7 @@ Also, if you go to
 Workloads -> Deployments
 ```
 
-and open for example the `service-c-v1` deployment, you will find a *Service Mesh* tab with inbound traffic, Kiali information etc.
+select your project `<user>-apps` and open for example the `service-c-v1` deployment, you will find a *Service Mesh* tab with inbound traffic, Kiali information etc.
 
 ![Workloads Service Mesh tab](../assets/img/6-workload-deployment.png)
 

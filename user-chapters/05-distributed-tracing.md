@@ -12,7 +12,7 @@ graph LR
 
 ## How it is configured
 
-We already configured tracing during the [installation](../admin-chapters/01-installation.md#distributed-tracing). Two resources are important.
+Your admin configured tracing during the [installation](../admin-chapters/01-installation.md#distributed-tracing). The configuration is mesh-wide, so it applies to the namespaces of all users and there's nothing to do for you. Two resources are important.
 
 The `Istio` resource registers the OpenTelemetry collector as tracing provider (`k8s/tracing/istio-update.yml`):
 
@@ -60,7 +60,7 @@ Our apps do that, so we get one trace across the Gateway, service-a, service-b a
 Generate some traffic (if it's not running anymore):
 
 ```bash
-export ROUTE="https://$(oc get route -n servicemesh-apps apps-gateway -o jsonpath='{.spec.host}')"
+export ROUTE="https://$(oc get route -n $APPS_NS apps-gateway -o jsonpath='{.spec.host}')"
 while true; do curl $ROUTE; sleep 3; done
 ```
 
@@ -69,6 +69,8 @@ Open the Distributed Tracing UI in the OpenShift console:
 ```text
 Observe -> Traces -> Tempo instance "tempostack" -> Tenant "dev"
 ```
+
+All users send their traces to the same Tempo tenant, so you see the traces of the other users as well. Filter by your Gateway: select the service name `apps-gateway-istio.<user>-apps` (e.g. `apps-gateway-istio.user1-apps`) in the filter and run the query. The Gateway is the first hop of every request, so you get the whole traces of your apps.
 
 Click on a trace to see the spans of the Gateway and the waypoint for every hop and how long each service took.
 
@@ -101,18 +103,18 @@ spec:
 | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `internal_url`       | Tempo API of the tenant `dev`, behind the TempoStack gateway                                                     |
 | `auth`               | Kiali authenticates with its ServiceAccount token. All authenticated users may read the `dev` tenant (ClusterRole `tempostack-traces-reader`) |
-| `use_waypoint_name`  | The waypoint reports its spans as `waypoint.servicemesh-apps`, so Kiali looks up the traces of a service via its waypoint |
+| `use_waypoint_name`  | The waypoint reports its spans as `waypoint.<namespace>`, so Kiali looks up the traces of a service via its waypoint |
 | `tempo_config`       | *View in Tracing* links open the trace in **Observe -> Traces** of the OpenShift console (`external_url` is the console URL) |
 
 Keep the traffic running and open Kiali:
 
 ```bash
-echo "https://$(oc get route -n istio-system kiali -o jsonpath='{.spec.host}')"
+echo $KIALI_URL
 ```
 
 ### Traces of a service
 
-Select the namespace `servicemesh-apps` and go to
+Select your namespace `<user>-apps` and go to
 
 ```text
 Services -> service-c -> Traces
@@ -129,11 +131,11 @@ As our apps forward the trace headers, a trace of service-c contains the full pa
 
 ### Traces in the Traffic Graph
 
-Go to the *Traffic Graph* of the namespace `servicemesh-apps` and click on the `service-c` service node. The side panel on the right now has a *Traces* tab with the latest traces. Click on a trace and Kiali highlights its path in the graph. *Show Traces* takes you to the *Traces* tab of the service.
+Go to the *Traffic Graph* of your namespace `<user>-apps` and click on the `service-c` service node. The side panel on the right now has a *Traces* tab with the latest traces. Click on a trace and Kiali highlights its path in the graph. *Show Traces* takes you to the *Traces* tab of the service.
 
 ### Traces in the OpenShift console
 
-The OpenShift Service Mesh console plugin shows the same information without leaving the OpenShift console. Go to
+The OpenShift Service Mesh console plugin shows the same information without leaving the OpenShift console. Select your project `<user>-apps` and go to
 
 ```text
 Networking -> Services -> service-c -> Service Mesh -> Traces

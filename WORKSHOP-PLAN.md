@@ -79,15 +79,15 @@ The admin script creates a ConfigMap `workshop-info` in every `<u>-terminal` nam
   - A user with the `admin` RoleBinding in a namespace can create DevWorkspaces there and read the `web-terminal-*` templates (`oc auth can-i --as=user1`).
 - **No per-user downloads from GitHub.** With up to 70 users, all terminal pods share the cluster's outbound IP. GitHub doesn't guarantee a download limit, and 70 near-identical downloads in a few minutes risk being throttled during the workshop. Tools are served from inside the cluster instead (decision 2026-11-10):
 - [x] **In-cluster tools server (option 1):** `k8s/workshop-tools/tools-server.yml`, applied by `setup-users.sh` with `envsubst '${ISTIO_VERSION}'`. Tested on the cluster (2026-11-10): the init container (UBI `httpd-24`) downloads `istioctl-<version>-linux-<arch>.tar.gz` once, the httpd container serves `istioctl.tar.gz`, `envsubst` and `istio-version` at `http://tools.workshop-tools.svc:8080`. Reachable from other namespaces without a NetworkPolicy. A pod label with the Istio version restarts the server (new download) when the version changes. Original plan: `setup-users.sh` creates namespace `workshop-tools` (label `servicemesh-workshop/shared=true`) with a small web server Deployment + Service (e.g. `tools.workshop-tools.svc:8080`). An init container downloads `istioctl` (version from the installed `Istio` CR) **once** and writes the `envsubst` script. The web server (unprivileged, e.g. UBI httpd/nginx, restricted SCC) serves both files. NetworkPolicy/ingress: reachable from the `<u>-terminal` namespaces.
-- [ ] **TODO – check option 3 during the full install:** does the OSSM 3 operator add `istioctl` to the console's Command Line Tools page (`oc get consoleclidownloads`)? If so, the tools server only serves the `envsubst` script (or `workshop-env.sh` writes it inline) and `istioctl` comes from the Red Hat download, which runs inside the cluster too. Check whether the download URL works from a terminal pod without logging in, and whether the version matches the control plane.
+- [x] **Option 3 checked (2026-11-10): not usable.** The `istioctl` ConsoleCLIDownload exists, but it only links to `https://mirror.openshift.com/pub/cgw/servicemesh/latest` (external, latest version instead of the control plane's version). The tools server stays. Original TODO: does the OSSM 3 operator add `istioctl` to the console's Command Line Tools page (`oc get consoleclidownloads`)? If so, the tools server only serves the `envsubst` script (or `workshop-env.sh` writes it inline) and `istioctl` comes from the Red Hat download, which runs inside the cluster too. Check whether the download URL works from a terminal pod without logging in, and whether the version matches the control plane.
 - [x] `workshop-env.sh` installs `istioctl` and `envsubst` from the in-cluster URL (in `workshop-info`, key `TOOLS_URL`) into `/wto/bin/downloaded` if they're missing, so re-sourcing after a terminal restart works too. `ISTIO_VERSION` stays in `workshop-info` for the version check (users can't read the cluster-scoped `Istio` CR). Tested end to end in a pod with the Web Terminal tooling image (temporary namespaces, `oc whoami` stubbed): tools land in `/wto/bin/downloaded`, `envsubst` works, re-sourcing skips the downloads.
 - Fixed during the test: the spike's `envsubst` one-liner used `s/…/…/`, and the `//` in the replacement ended the expression. It uses `s#…#…#` now. `istioctl version --short` prints `client version: 1.31.0`, so the script compares the last word.
 - Option 2 (custom tooling image with the tools built in) not pursued: it needs a registry and a rebuild per Istio version. Revisit only if the workshop runs often.
-- [ ] Still to check once the mesh is installed: `istioctl ztunnel-config workload -n ztunnel` with the ztunnel RBAC from 1.2. Last resort if it doesn't work: Kiali views (Workloads → ztunnel details). The custom tooling image fallback isn't needed.
+- [x] Tested (2026-11-10): `istioctl ztunnel-config workload/svc -n ztunnel` works as `user1` after adding `get/list daemonsets` to the ztunnel Role (istioctl looks up the DaemonSet first). Original item: `istioctl ztunnel-config workload -n ztunnel` with the ztunnel RBAC from 1.2. Last resort if it doesn't work: Kiali views (Workloads → ztunnel details). The custom tooling image fallback isn't needed.
 
 ### 1.2 `scripts/setup-users.sh` (admin, idempotent)
 
-Written (2026-11-10). Tested so far: syntax and user detection (finds `user1`–`user5` via the realm import, excludes `admin`). **The full run is still untested**, it needs the mesh (`Istio` CR, `ztunnel` namespace, Kiali route). Also check during that run that `IstioRevision.spec.version` holds the resolved version (e.g. `v1.31.0`, not the alias `v1.31-latest`). The script reads it from there, and `ISTIO_VERSION=1.31.0` overrides it.
+Written (2026-11-10). **Full run tested (2026-11-10)** after `install.sh`: users `user1`–`user5` detected from the realm import, `IstioRevision.spec.version` gives the resolved version (`1.31.1`), the tools server serves istioctl 1.31.1, the Perses viewer roles exist. Re-running with `setup-users.sh -y user1` (late user) keeps the other group members. Fixed during the run: the permission check used `can-i get pods/log`, which `oc` reads as "the pod named log" (always passed) and `can-i create pods/portforward` (always failed). It uses `--subresource` now. Note: `oc auth can-i` also answers `no` for `prometheuses/api` although a SubjectAccessReview allows it, so that one isn't in the check.
 
 
 User detection, first match wins:
@@ -109,19 +109,24 @@ Per user:
 Shared (once):
 - [x] Namespace `workshop-tools` with the in-cluster tools server (see 1.1)
 - [x] OpenShift Group `servicemesh-workshop-users` with all detected users. The cluster-scoped bindings go to the group. Existing members are kept, so adding a late user doesn't drop the others
-- [x] `ztunnel` namespace: Role with `get/list pods`, `get pods/log`, `create pods/portforward`, bound to the group (needed for ch. 3 ztunnel logs and `istioctl ztunnel-config`). Note: users can see other users' workloads/logs in the ztunnel. That's acceptable for a workshop.
-- [x] Metrics: `cluster-monitoring-view` for the group, because the L4 metrics live in the `ztunnel` namespace (ch. 2 "Metrics") and the Perses dashboards query across namespaces. Alternative: only `view` in `ztunnel` (needs testing whether Thanos tenancy is enough).
-- [x] Perses: RoleBindings in `perses-dev` for whichever `perses(dashboard|datasource|globaldatasource)-viewer-role` ClusterRoles exist. Still to check after the install: do these role names exist in the installed COO version?
+- [x] `ztunnel` namespace: Role with `get/list pods`, `get pods/log`, `create pods/portforward`, `get/list daemonsets`, bound to the group (needed for ch. 3 ztunnel logs and `istioctl ztunnel-config`). Note: users can see other users' workloads/logs in the ztunnel. That's acceptable for a workshop.
+- [x] Metrics: custom ClusterRole `servicemesh-workshop-monitoring-view` for the group, because the L4 metrics live in the `ztunnel` namespace (ch. 2 "Metrics") and the Perses dashboards query across namespaces. It's `cluster-monitoring-view` without `get namespaces`, only `get/create prometheuses/api` (name `k8s`)
+  - First version used `cluster-monitoring-view`. Side effect found in the smoke test: its `get namespaces` makes `oc projects`, the console's project list and Kiali's namespace list show all ~100 namespaces
+  - Why the narrow role is enough: the console's Observe -> Metrics only checks `get prometheuses/api` (name `k8s`, all namespaces) to choose the cluster-wide Thanos endpoint (port 9091) instead of the namespace-scoped tenancy endpoint (checked in the monitoring-plugin code). `get namespaces` is only used by the old built-in dashboards, we use Perses. Perses forwards the user's token to Thanos 9091
+  - Tested: `oc projects` as user1/user2 shows only the own three namespaces, `get ns kube-system` is forbidden. A test ServiceAccount with only this role queried `istio_tcp_connections_opened_total` (namespace `ztunnel`) through the Thanos route, without it the result is 403. Perses dashboards/datasources still readable. Step 5 of the script checks it (`oc auth can-i get prometheuses.monitoring.coreos.com/k8s --subresource=api`, the resource name is required)
+  - Still for the manual browser run: Observe -> Metrics with the ch. 2 query, Perses dashboards, Kiali namespace list
+- [x] Perses: RoleBindings in `perses-dev` for whichever `perses(dashboard|datasource|globaldatasource)-viewer-role` ClusterRoles exist. Checked after the install: all three exist, `user1` can list the dashboards
 - [x] Step 5 of the script checks the first user with `oc auth can-i --as=<u> --as-group=servicemesh-workshop-users …` and warns for anything missing. Original item: verify that users can manage Gateway, HTTPRoute, ReferenceGrant, `networking.istio.io` (VirtualService, DestinationRule), `security.istio.io` (PeerAuthentication, AuthorizationPolicy, RequestAuthentication) and `monitoring.coreos.com` PodMonitor in their namespaces. Add aggregated ClusterRoles (`aggregate-to-admin`) for anything missing.
-- [ ] Tempo: tenant `dev` is already readable by `system:authenticated`. Nothing to do, but all users see all traces (the chapter tells them to filter by their namespace).
-- [ ] Kiali (OpenShift auth) shows only namespaces a user has access to. Check that users can log in to Kiali and to the OSSM console plugin.
+- [x] Tempo: tenant `dev` is already readable by `system:authenticated` (ClusterRoleBinding `tempostack-traces-reader`, confirmed). Nothing to do, but all users see all traces (the chapter tells them to filter by their namespace).
+- [ ] Kiali (OpenShift auth) shows only namespaces a user has access to. Check that users can log in to Kiali and to the OSSM console plugin. Needs a real browser login (manual run). With the narrow monitoring role, Kiali should only list the own three namespaces
 
 Output at the end: table of users + namespaces, console URL, Kiali URL, repo URL to clone.
 
 ### 1.3 Integration with `install.sh`
 
 - [x] Keep `install.sh` for the platform only (+ Web Terminal). At the end, print "next: `./scripts/setup-users.sh`" (or add an opt-in flag `--with-users`).
-- [ ] Smoke test as a user: `oc login` as `user1` (or `--as`), go through ch. 2 (deploy, onboard, label), ch. 4 (gateway + waypoint) and ch. 10 (sidecar namespace).
+- [x] Smoke test as `user1` (2026-11-10): all commands of user chapters 1–10 run with `oc`/`istioctl` impersonating `user1` (`--as=user1 --as-group=servicemesh-workshop-users …`), the "outside the mesh" curl and the tool downloads ran in a real Web Terminal pod created as `user1`. Every expected result matched (ch. 3 permissive/strict/L4 deny + ztunnel log, ch. 4 ztunnel svc output, ch. 6 401/403/200, ch. 7 weights, ch. 8 one error with outlier detection and none with retries, ch. 9 counter +11, ch. 10 route conditions and AuthZ). Not covered: console UI, Kiali, Perses and Traces pages as a user (no OIDC login from the CLI), terminal tabs. `user1` was reset afterwards (namespaces empty, labels as after `setup-users.sh`)
+- [ ] Manual run in the browser as a workshop user: console Web Terminal, Kiali login and namespace list, Observe -> Metrics/Dashboards/Traces
 
 ---
 
@@ -167,19 +172,23 @@ user-chapters/
 ### 2.4 User chapters
 
 - [x] New `user-chapters/01-getting-started.md`: log in to the console as `userN`, open the Web Terminal (**select project `<u>-terminal`**), `git clone https://github.com/nikolaus-lemberski/openshift-servicemesh-ambient.git`, `cd`, `source scripts/workshop-env.sh`, check with `oc project`/`oc get ns`. Explain the three namespaces. Note on terminal restarts (re-source the env).
-- [ ] Chapters 02–10: replace `servicemesh-apps` → `$APPS_NS`, `servicemesh-sidecar` → `$SIDECAR_NS` in commands. YAML snippets show `${APPS_NS}` where it matters. Kiali/console steps: "select your namespace `<u>-apps`"
-- [ ] Ch. 2: remove `ns.yml`/namespace creation, keep the onboarding label step (users now have the permission). Metrics/Perses: filter by own namespace
-- [ ] Ch. 3: the "outside the mesh" test runs directly from the Web Terminal (`curl http://service-c.$APPS_NS:8080/health`), the `curl-test` pod stays only in `$APPS_NS`. The ztunnel logs step: grep for the user's own namespace
-- [ ] Ch. 4: gateway + route per user (host is generated per namespace, which is fine). Check that `istioctl ztunnel-config svc` works with the ztunnel RBAC
-- [ ] Ch. 5: mention that tracing config (`Telemetry`, `istio-update`) is mesh-wide and done by the admin. Search traces by `service.name` / `waypoint.$APPS_NS`
-- [ ] Ch. 6: `KEYCLOAK_HOST` from `workshop-env.sh` instead of `ingresses.config/cluster`. The Keycloak realm `servicemesh` (testuser/adminuser) is shared, which is fine
-- [ ] Ch. 7–9: namespace replacements only. `oc port-forward` works inside the terminal
-- [ ] Ch. 10: add an `oc label namespace $SIDECAR_NS istio-injection=enabled` step + `oc apply -k k8s/sidecar -n $SIDECAR_NS`. `envsubst` for files 1–5
-- [ ] All chapters: cleanup sections without the `default`-namespace steps
+- [x] Chapters 02–10: replace `servicemesh-apps` → `$APPS_NS`, `servicemesh-sidecar` → `$SIDECAR_NS` in commands. YAML snippets show `${APPS_NS}` where it matters, namespace snippets show `user1-apps   # <user>-apps`. Kiali/console steps: "select your namespace `<user>-apps`". All `oc apply/delete -f` of app manifests get `-n $APPS_NS` (works even if the user switched projects). Kiali URL from `$KIALI_URL` (users can't read the route in `istio-system`)
+- [x] Ch. 2: no namespace creation (the admin created it, the snippet explains the discovery label), `oc apply -k k8s/apps -n $APPS_NS`, onboarding label step stays. `istioctl ztunnel-config workload --workload-namespace $APPS_NS`. Metrics query with own namespace, Perses: select own namespace in the dashboard variables
+- [x] Ch. 3: the "outside the mesh" client is the Web Terminal itself (`curl http://service-c.$APPS_NS:8080/health`), the `curl-test` pod only in `$APPS_NS`. l4-authz with `envsubst`. ztunnel logs: `grep $APPS_NS`
+- [x] Ch. 4: Gateway `from: Same` explained, `istioctl ztunnel-config svc --service-namespace $APPS_NS` (flags checked with the local `istioctl`; still to check with the ztunnel RBAC)
+- [x] Ch. 5: tracing config is mesh-wide and done by the admin. Filter traces by service name `apps-gateway-istio.<user>-apps`
+- [x] Ch. 6: `KEYCLOAK_HOST` from `workshop-env.sh`. The Keycloak realm is shared
+- [x] Ch. 7–9: namespace replacements only
+- [x] Ch. 10: `oc label namespace $SIDECAR_NS istio-injection=enabled` before `oc apply -k k8s/sidecar -n $SIDECAR_NS`. `envsubst` for files 1–5 (1, 3, 4, 5 without `-n`). Cleanup empties the namespace (apps, policies, ReferenceGrant, injection label) instead of deleting it, the namespace belongs to the admin
+- [x] All chapters: cleanup sections without the `default`-namespace steps
+- [x] New section "A second terminal tab" in user chapter 01: the traffic loops run in a second tab, which needs `source scripts/workshop-env.sh` again. All "new terminal" hints link there
 - [x] README: workshop flow (admin → users), links to `admin-chapters/` and `user-chapters/`. Update CLAUDE.md (directories, namespace conventions, scripts)
-- [ ] Check during the smoke test: does the cloned repository survive a Web Terminal restart (idle stop)? Chapter 1 currently says "clone it again if it's gone"
+- [x] The cloned repository does **not** survive a terminal restart: HOME (`/home/user`) is on the container's overlay filesystem. Chapter 1's "clone it again if it's gone" is right
 - [ ] Users clone `main`: merge `workshop-multiuser` before the first workshop, or add `-b workshop-multiuser` to the clone command for testing
-- [ ] Screenshots show `servicemesh-apps`. Leave them (add a note) or retake them later
+- [x] Screenshots show `servicemesh-apps`: note in user chapter 01. Retake them later (optional)
+- [ ] Check in the manual run: the Web Terminal has the **+** for a second tab and the tools in `/wto/bin/downloaded` are visible there (`/wto/bin/downloaded` is on the PATH and writable, checked)
+- [x] Tempo has the service names `apps-gateway-istio.user1-apps`, `waypoint.user1-apps` and `service-a/b/c.user1-sidecar`, as the chapters say
+- [x] `curl` from the Web Terminal to `service-c.$APPS_NS` works, `jq` and `git` are in the Web Terminal
 
 ---
 
@@ -192,7 +201,7 @@ Removes everything `setup-users.sh` created, **not** the mesh infrastructure. It
 - [x] Confirmation prompt (`-y` to skip). Optional user list to clean up only some users
 - [x] Delete namespaces with `servicemesh-workshop/user` (this also removes apps, gateways, waypoints, policies, curl pods and the users' DevWorkspaces/Web Terminals). Wait for them to be gone
 - [x] Delete ClusterRoles/ClusterRoleBindings with the label
-- [x] Shared objects: namespace `workshop-tools` (tools server), Group `servicemesh-workshop-users`, ztunnel Role/RoleBinding, `cluster-monitoring-view` binding, Perses bindings, any aggregated ClusterRoles
+- [x] Shared objects: namespace `workshop-tools` (tools server), Group `servicemesh-workshop-users`, ztunnel Role/RoleBinding, monitoring-view ClusterRole/binding, Perses bindings, any aggregated ClusterRoles
 - [x] Doesn't touch `User`/`Identity` objects (created by the IdP at login, not by us), the Web Terminal Operator or the mesh
 - [x] Idempotent, safe to run when nothing is there (same `safe_delete` style as `cleanup.sh`)
 - [x] Note: traces of the users remain in Tempo storage until retention expires
@@ -219,5 +228,5 @@ Removes everything `setup-users.sh` created, **not** the mesh infrastructure. It
 1. **No single-user mode.** An admin who wants to try the chapters runs `setup-users.sh admin` and works as a "user". The manifests and chapters exist only once.
 2. **Namespaces** `<u>-apps` / `<u>-sidecar` / `<u>-terminal`.
 3. **istioctl:** no per-user downloads from GitHub (rate-limit risk with up to 70 users behind one IP). Served by an in-cluster tools server in `workshop-tools` (option 1). TODO: check during the full install whether OSSM 3 provides an `istioctl` download in the console (option 3) and use that instead if it works (see 1.1).
-4. **Metrics:** `cluster-monitoring-view` for the group `servicemesh-workshop-users`.
+4. **Metrics:** custom ClusterRole `servicemesh-workshop-monitoring-view` (`cluster-monitoring-view` without `get namespaces`) for the group `servicemesh-workshop-users`.
 5. **Chapters:** split into `admin-chapters/` and `user-chapters/` (2.2).

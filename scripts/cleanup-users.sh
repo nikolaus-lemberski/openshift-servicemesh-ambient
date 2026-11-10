@@ -81,7 +81,7 @@ if (( ${#USERS[@]} > 0 )); then
   fi
 else
   info "Step 2: Removing the shared objects ..."
-  # Namespace workshop-tools, Group, mesh-resources ClusterRole, cluster-monitoring-view binding
+  # Namespace workshop-tools, Group, mesh-resources and monitoring-view ClusterRoles
   for res in $(oc get namespace,group,clusterrolebinding,clusterrole -l "$SHARED_LABEL" -o name); do
     oc delete "$res" --ignore-not-found --wait=false >/dev/null
     ok "Deleted ${res}"

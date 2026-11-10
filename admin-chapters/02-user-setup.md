@@ -23,7 +23,7 @@ The script creates this RBAC:
 | ClusterRole + ClusterRoleBinding `servicemesh-workshop-<user>-namespaces` | the two app namespaces only (`resourceNames`) | Label the own namespaces: ambient onboarding, waypoint, sidecar injection |
 | Group `servicemesh-workshop-users`                           | all users                   | Subject of the shared bindings below                                                        |
 | Role/RoleBinding `servicemesh-workshop-ztunnel`              | namespace `ztunnel`         | ztunnel logs (chapter 3) and `istioctl ztunnel-config` (chapter 4)                          |
-| ClusterRoleBinding to `cluster-monitoring-view`              | cluster                     | Metrics and Perses dashboards, the L4 metrics come from the `ztunnel` namespace              |
+| ClusterRole + ClusterRoleBinding `servicemesh-workshop-monitoring-view` | cluster          | Metrics and Perses dashboards, the L4 metrics come from the `ztunnel` namespace. Like `cluster-monitoring-view`, but without `get namespaces`, so users only see their own projects |
 | RoleBindings to the Perses viewer roles                      | namespace `perses-dev`      | Read the Perses dashboards and datasources                                                  |
 
 > [!NOTE]

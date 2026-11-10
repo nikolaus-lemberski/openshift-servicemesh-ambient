@@ -14,23 +14,23 @@ We'll mirror 100 % of the traffic that goes to service-c-v1 to a freshly deploye
 
 ## Preparation — Deploy v2 and version-specific Services
 
-If you're in a new terminal, set the `ROUTE` variable again:
+If you're in a new terminal tab, load the environment ([Getting Started](01-getting-started.md#a-second-terminal-tab)) and set the `ROUTE` variable again:
 
 ```bash
-export ROUTE="https://$(oc get route -n servicemesh-apps apps-gateway -o jsonpath='{.spec.host}')"
+export ROUTE="https://$(oc get route -n $APPS_NS apps-gateway -o jsonpath='{.spec.host}')"
 ```
 
 We need the version-specific Services (`service-c-v1`, `service-c-v2`) and the v2 Deployment. These are the same resources we used in the canary demo:
 
 ```bash
-oc apply -f k8s/istiofeatures/canary/0-service-c-versions.yml
-oc apply -f k8s/istiofeatures/canary/c-v2-deploy.yml
+oc apply -f k8s/istiofeatures/canary/0-service-c-versions.yml -n $APPS_NS
+oc apply -f k8s/istiofeatures/canary/c-v2-deploy.yml -n $APPS_NS
 ```
 
 Wait for v2 to be ready:
 
 ```bash
-oc rollout status deployment/service-c-v2 -n servicemesh-apps
+oc rollout status deployment/service-c-v2 -n $APPS_NS
 ```
 
 ## Step 1 — Apply the mirror HTTPRoute
@@ -42,7 +42,6 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: service-c-mirror
-  namespace: servicemesh-apps
 spec:
   parentRefs:
   - group: ""
@@ -62,7 +61,7 @@ spec:
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/mirroring/1-mirror-httproute.yml
+oc apply -f k8s/istiofeatures/mirroring/1-mirror-httproute.yml -n $APPS_NS
 ```
 
 ## Step 2 — Generate traffic and verify
@@ -70,8 +69,8 @@ oc apply -f k8s/istiofeatures/mirroring/1-mirror-httproute.yml
 First, check the v2 call counter before sending any traffic:
 
 ```bash
-export V2_POD=$(oc get pods -n servicemesh-apps -l app=service-c,version=v2 -o jsonpath='{.items[0].metadata.name}')
-oc port-forward -n servicemesh-apps $V2_POD 8080:8080 &
+export V2_POD=$(oc get pods -n $APPS_NS -l app=service-c,version=v2 -o jsonpath='{.items[0].metadata.name}')
+oc port-forward -n $APPS_NS $V2_POD 8080:8080 &
 ```
 
 ```bash
@@ -90,7 +89,7 @@ All responses come from **v1** only — the user never sees v2 responses because
 Now check the v2 call counter again:
 
 ```bash
-oc port-forward -n servicemesh-apps $V2_POD 8080:8080 &
+oc port-forward -n $APPS_NS $V2_POD 8080:8080 &
 ```
 
 ```bash
@@ -105,9 +104,9 @@ The counter should have jumped up by 11 (10 mirrored requests plus your own chec
 ## Cleanup
 
 ```bash
-oc delete -f k8s/istiofeatures/mirroring/1-mirror-httproute.yml
-oc delete -f k8s/istiofeatures/canary/c-v2-deploy.yml
-oc delete -f k8s/istiofeatures/canary/0-service-c-versions.yml
+oc delete -f k8s/istiofeatures/mirroring/1-mirror-httproute.yml -n $APPS_NS
+oc delete -f k8s/istiofeatures/canary/c-v2-deploy.yml -n $APPS_NS
+oc delete -f k8s/istiofeatures/canary/0-service-c-versions.yml -n $APPS_NS
 ```
 
 ---

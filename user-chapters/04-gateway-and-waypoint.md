@@ -37,7 +37,6 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: apps-gateway
-  namespace: servicemesh-apps
   annotations:
     networking.istio.io/service-type: ClusterIP
 spec:
@@ -48,16 +47,18 @@ spec:
     protocol: HTTP
     allowedRoutes:
       namespaces:
-        from: All
+        from: Same
 ```
+
+`from: Same` means only HTTPRoutes from your own namespace can attach to your Gateway. The other users have their own Gateways.
 
 For every Gateway, Istio deploys a gateway proxy and creates a Service named `<gateway-name>-istio`. By default this Service is of type `LoadBalancer`. We annotate the Gateway with `networking.istio.io/service-type: ClusterIP` and point an OpenShift Route to the `apps-gateway-istio` Service instead, so the OpenShift router handles ingress (and TLS edge termination). Both are in the same file.
 
 We create the Gateway and delete our old Route, as we're using the Gateway from now on:
 
 ```bash
-oc apply -f k8s/apps_gateway_waypoint/gateway.yml
-oc -n servicemesh-apps delete route service-a
+oc apply -f k8s/apps_gateway_waypoint/gateway.yml -n $APPS_NS
+oc delete route service-a -n $APPS_NS
 ```
 
 The Gateway doesn't know where to send requests yet. An `HTTPRoute` attaches to the Gateway (`parentRefs`) and forwards all paths to service-a:
@@ -67,7 +68,6 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: apps-gateway-default-route
-  namespace: servicemesh-apps
 spec:
   parentRefs:
   - name: apps-gateway
@@ -82,32 +82,32 @@ spec:
 ```
 
 ```bash
-oc apply -f k8s/apps_gateway_waypoint/service-a-httproute.yml
+oc apply -f k8s/apps_gateway_waypoint/service-a-httproute.yml -n $APPS_NS
 ```
 
 Test the routing (note that `ROUTE` now points to the Gateway Route):
 
 ```bash
-export ROUTE="https://$(oc get route -n servicemesh-apps apps-gateway -o jsonpath='{.spec.host}')"
+export ROUTE="https://$(oc get route -n $APPS_NS apps-gateway -o jsonpath='{.spec.host}')"
 curl $ROUTE
 ```
 
 ### Testing without waypoint proxy
 
-Now generate some traffic in a second terminal:
+Now generate some traffic in a second terminal tab (with the environment loaded, see [Getting Started](01-getting-started.md#a-second-terminal-tab)):
 
 ```bash
-export ROUTE="https://$(oc get route -n servicemesh-apps apps-gateway -o jsonpath='{.spec.host}')"
+export ROUTE="https://$(oc get route -n $APPS_NS apps-gateway -o jsonpath='{.spec.host}')"
 while true; do curl $ROUTE; sleep 3; done
 ```
 
 Open Kiali (or use *Service Mesh* in the OpenShift console):
 
 ```bash
-echo "https://$(oc get route -n istio-system kiali -o jsonpath='{.spec.host}')"
+echo $KIALI_URL
 ```
 
-Check the *Traffic Graph* for the namespace `servicemesh-apps`. The traffic is routed from the Gateway through all services. The **traffic connection lines are blue**, which means all traffic is going through the ztunnel and we have Service Mesh functionality up to L4 of the network stack.
+Check the *Traffic Graph* for your namespace `<user>-apps`. The traffic is routed from the Gateway through all services. The **traffic connection lines are blue**, which means all traffic is going through the ztunnel and we have Service Mesh functionality up to L4 of the network stack.
 
 ![Kiali with Gateway](../assets/img/7-kiali-gateway.png)
 
@@ -120,7 +120,6 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: waypoint
-  namespace: servicemesh-apps
   labels:
     istio.io/waypoint-for: service
 spec:
@@ -136,13 +135,13 @@ spec:
 - `istio.io/waypoint-for: service` means the waypoint handles traffic sent to **Services** (not traffic sent directly to pod IPs).
 
 ```bash
-oc apply -f k8s/apps_gateway_waypoint/waypoint_proxy.yml
+oc apply -f k8s/apps_gateway_waypoint/waypoint_proxy.yml -n $APPS_NS
 ```
 
 A waypoint proxy and the ingress gateway are now deployed next to the apps:
 
 ```bash
-oc get pod -n servicemesh-apps
+oc get pod -n $APPS_NS
 ```
 
 ```text
@@ -161,7 +160,7 @@ Deploying the waypoint is not enough. We have to tell the mesh which services sh
 ```yaml
 kind: Namespace
 metadata:
-  name: servicemesh-apps
+  name: user1-apps   # <user>-apps
   labels:
     istio-discovery: enabled
     istio.io/dataplane-mode: ambient
@@ -169,29 +168,29 @@ metadata:
 ```
 
 ```bash
-oc label namespace servicemesh-apps istio.io/use-waypoint=waypoint
+oc label namespace $APPS_NS istio.io/use-waypoint=waypoint
 ```
 
 You can verify the waypoint proxy via *istioctl*. The column `WAYPOINT` shows `waypoint` for our services:
 
 ```bash
-istioctl ztunnel-config svc -n ztunnel
+istioctl ztunnel-config svc -n ztunnel --service-namespace $APPS_NS
 ```
 
 ```text
-NAMESPACE        SERVICE NAME         SERVICE VIP     WAYPOINT ENDPOINTS
-servicemesh-apps apps-gateway-istio   172.231.231.45  waypoint 1/1
-servicemesh-apps service-a            172.231.9.178   waypoint 1/1
-servicemesh-apps service-b            172.231.116.204 waypoint 1/1
-servicemesh-apps service-c            172.231.19.29   waypoint 1/1
-servicemesh-apps waypoint             172.231.53.208  None     1/1
+NAMESPACE  SERVICE NAME         SERVICE VIP     WAYPOINT ENDPOINTS
+user1-apps apps-gateway-istio   172.231.231.45  waypoint 1/1
+user1-apps service-a            172.231.9.178   waypoint 1/1
+user1-apps service-b            172.231.116.204 waypoint 1/1
+user1-apps service-c            172.231.19.29   waypoint 1/1
+user1-apps waypoint             172.231.53.208  None     1/1
 ```
 
 As apps may use a persistent HTTP connection for downstream service calls, restart the deployments to make sure they will use the waypoint proxy:
 
 ```bash
-oc rollout restart deployment/service-a -n servicemesh-apps
-oc rollout restart deployment/service-b -n servicemesh-apps
+oc rollout restart deployment/service-a -n $APPS_NS
+oc rollout restart deployment/service-b -n $APPS_NS
 ```
 
 ### Ingress waypoint routing
@@ -199,7 +198,7 @@ oc rollout restart deployment/service-b -n servicemesh-apps
 If not instructed otherwise, the Gateway sends traffic directly to the destination pod and skips the waypoint. To make the Gateway send traffic to service-a through the waypoint (so we get L7 features for this hop too), we label the service the Gateway uses:
 
 ```bash
-oc -n servicemesh-apps label service service-a istio.io/ingress-use-waypoint=true
+oc label service service-a -n $APPS_NS istio.io/ingress-use-waypoint=true
 ```
 
 | Label                                 | Set on    | Effect                                                         |
@@ -216,14 +215,14 @@ Keep the traffic running (or start it again):
 while true; do curl $ROUTE; sleep 3; done
 ```
 
-In Kiali wait for the traffic data coming in and check the *Traffic Graph* for the namespace `servicemesh-apps`. The **traffic connection lines are changing to green**, which means the traffic is going through the waypoint proxy and we have Service Mesh functionality up to L7 of the network stack.
+In Kiali wait for the traffic data coming in and check the *Traffic Graph* for your namespace `<user>-apps`. The **traffic connection lines are changing to green**, which means the traffic is going through the waypoint proxy and we have Service Mesh functionality up to L7 of the network stack.
 
 ![Kiali with Waypoint Proxy](../assets/img/8-kiali-waypoint-proxy.png)
 
-Also check the other observability dashboards we have already seen before. For example, the query below now has datapoints, as the waypoint reports HTTP metrics including the response codes:
+Also check the other observability dashboards we have already seen before. For example, the query below (with your namespace) now has datapoints, as the waypoint reports HTTP metrics including the response codes:
 
 ```text
-istio_requests_total{destination_workload_namespace="servicemesh-apps"}
+istio_requests_total{destination_workload_namespace="user1-apps"}
 ```
 
 ---

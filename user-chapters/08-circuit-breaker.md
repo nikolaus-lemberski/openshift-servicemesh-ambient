@@ -14,22 +14,22 @@ We'll demonstrate this on service-c-v1 with 2 replicas. One pod will be "crashed
 
 ## Preparation — Scale service-c-v1
 
-If you're in a new terminal, set the `ROUTE` variable again:
+If you're in a new terminal tab, load the environment ([Getting Started](01-getting-started.md#a-second-terminal-tab)) and set the `ROUTE` variable again:
 
 ```bash
-export ROUTE="https://$(oc get route -n servicemesh-apps apps-gateway -o jsonpath='{.spec.host}')"
+export ROUTE="https://$(oc get route -n $APPS_NS apps-gateway -o jsonpath='{.spec.host}')"
 ```
 
 Scale service-c-v1 to 2 replicas so the waypoint proxy round-robins between them:
 
 ```bash
-oc scale deployment/service-c-v1 -n servicemesh-apps --replicas=2
+oc scale deployment/service-c-v1 -n $APPS_NS --replicas=2
 ```
 
 Verify both pods are running:
 
 ```bash
-oc get pods -n servicemesh-apps -l app=service-c,version=v1
+oc get pods -n $APPS_NS -l app=service-c,version=v1
 ```
 
 Generate some traffic and confirm both pods handle requests — the abbreviated host ID in the response alternates:
@@ -43,8 +43,8 @@ for i in $(seq 1 10); do curl $ROUTE; done
 Pick one of the service-c pods and crash it via port-forwarding:
 
 ```bash
-export CRASH_POD=$(oc get pods -n servicemesh-apps -l app=service-c,version=v1 -o jsonpath='{.items[0].metadata.name}')
-oc port-forward -n servicemesh-apps $CRASH_POD 8080:8080 &
+export CRASH_POD=$(oc get pods -n $APPS_NS -l app=service-c,version=v1 -o jsonpath='{.items[0].metadata.name}')
+oc port-forward -n $APPS_NS $CRASH_POD 8080:8080 &
 ```
 
 ```bash
@@ -69,7 +69,6 @@ apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
   name: service-c-circuit-breaker
-  namespace: servicemesh-apps
 spec:
   host: service-c
   trafficPolicy:
@@ -88,7 +87,7 @@ spec:
 | `maxEjectionPercent`     | 100   | Up to 100 % of the endpoints may be ejected                                  |
 
 ```bash
-oc apply -f k8s/istiofeatures/circuit-breaker/1-destination-rule.yml
+oc apply -f k8s/istiofeatures/circuit-breaker/1-destination-rule.yml -n $APPS_NS
 ```
 
 Generate traffic again:
@@ -108,7 +107,6 @@ apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
   name: service-c-retry
-  namespace: servicemesh-apps
 spec:
   hosts:
   - service-c
@@ -125,7 +123,7 @@ spec:
 ```
 
 ```bash
-oc apply -f k8s/istiofeatures/circuit-breaker/2-retry-virtualservice.yml
+oc apply -f k8s/istiofeatures/circuit-breaker/2-retry-virtualservice.yml -n $APPS_NS
 ```
 
 Generate traffic:
@@ -143,7 +141,7 @@ Explore the Kiali Traffic Graph to see the Circuit Breaker and Retry applied and
 Repair the crashed pod:
 
 ```bash
-oc port-forward -n servicemesh-apps $CRASH_POD 8080:8080 &
+oc port-forward -n $APPS_NS $CRASH_POD 8080:8080 &
 ```
 
 ```bash
@@ -162,9 +160,9 @@ The host ID alternates again — both pods are back in rotation. The circuit has
 ## Cleanup
 
 ```bash
-oc delete -f k8s/istiofeatures/circuit-breaker/2-retry-virtualservice.yml
-oc delete -f k8s/istiofeatures/circuit-breaker/1-destination-rule.yml
-oc scale deployment/service-c-v1 -n servicemesh-apps --replicas=1
+oc delete -f k8s/istiofeatures/circuit-breaker/2-retry-virtualservice.yml -n $APPS_NS
+oc delete -f k8s/istiofeatures/circuit-breaker/1-destination-rule.yml -n $APPS_NS
+oc scale deployment/service-c-v1 -n $APPS_NS --replicas=1
 ```
 
 ---
