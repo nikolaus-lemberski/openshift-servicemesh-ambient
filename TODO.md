@@ -1,9 +1,5 @@
 # TODO
 
-## Still to test
-
-- [ ] Reinstall with `admin-scripts/install.sh` after `cleanup.sh` (check that the Web Terminal comes back)
-
 ## Optional
 
 - [ ] ResourceQuota/LimitRange per user namespace in `setup-users.sh` (default off, for larger groups)
