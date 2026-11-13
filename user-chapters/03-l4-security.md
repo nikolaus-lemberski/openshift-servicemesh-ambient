@@ -83,6 +83,9 @@ You should get a healthy response. Neither the curl pod nor service-c knows anyt
 | Web Terminal (no mesh)          | allowed              | rejected |
 | curl pod in `<user>-apps`       | allowed              | allowed  |
 
+> [!NOTE]
+> If your traffic loop from chapter 2 is still running, it gets `502 Bad Gateway` while STRICT is active. The OpenShift router isn't in the mesh either, so the ztunnel rejects its plain-text connections to service-a. This changes in chapter 4, where the traffic enters the mesh through a Gateway.
+
 ### Cleanup
 
 Remove the strict mTLS policy. We keep the curl pod for the next demo:

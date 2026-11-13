@@ -39,10 +39,10 @@ source user-scripts/workshop-env.sh
 - It installs `istioctl` (in the version of the mesh) and `envsubst` from the workshop's download server.
 - It switches to the project `<user>-apps`. Commands without `-n` go there.
 
-Expected result:
+Expected result (the `istioctl` version is the version of your mesh):
 
 ```text
-[INFO]  Installing istioctl 1.31.0 ...
+[INFO]  Installing istioctl 1.31.1 ...
 [INFO]  Installing envsubst ...
 [OK]    Workshop environment for user1
         APPS_NS=user1-apps  SIDECAR_NS=user1-sidecar  TERMINAL_NS=user1-terminal

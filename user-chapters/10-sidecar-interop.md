@@ -87,7 +87,10 @@ In the OpenShift console UI, open
 Service Mesh -> Traffic Graph
 ```
 
-Select your namespace `<user>-sidecar`. In the ambient namespace we only had L4 (TCP) edges until we added a waypoint proxy in chapter 4. Here we have HTTP edges right away, because every sidecar is a full L7 proxy. Activate *Security* in the *Display* menu: all calls are mTLS.
+Select your namespace `<user>-sidecar`. In the ambient namespace we only had L4 (TCP) edges until we added a waypoint proxy in chapter 4. Here we have HTTP edges right away, because every sidecar is a full L7 proxy.
+
+> [!NOTE]
+> The graph can stay empty for a few minutes after the deployment. The kustomization created a new PodMonitor for the sidecars, and Prometheus only scrapes them once it has reloaded its configuration. Activate *Security* in the *Display* menu: all calls are mTLS.
 
 Open one of the workloads, for example `service-c-v1`, and compare it with the same workload in `<user>-apps`: Kiali shows the `istio-proxy` sidecar in the pod details, while the workloads in `<user>-apps` are marked as ambient.
 

@@ -2,7 +2,6 @@
 
 ## Still to test
 
-- [ ] Browser run as a workshop user: console Web Terminal (incl. the **+** for a second tab), Kiali login and namespace list (only the own three namespaces), OSSM console plugin, Observe -> Metrics/Dashboards/Traces
 - [ ] `admin-scripts/cleanup.sh` on the cluster: open a Web Terminal, run the cleanup, check that no `controller.devfile.io` webhooks or devfile CRDs are left and that `oc exec` still works, then reinstall the Web Terminal
 - [ ] `admin-scripts/cleanup-users.sh` after a real `setup-users.sh` run (Web Terminal DevWorkspaces in `<user>-terminal`, waypoints in `<user>-apps`)
 
