@@ -230,12 +230,14 @@ safe_delete_ns ztunnel
 safe_delete_ns openshift-tempo-operator
 safe_delete_ns openshift-opentelemetry-operator
 safe_delete_ns openshift-cluster-observability-operator
+# The console creates it for the Web Terminals of cluster admins
+safe_delete_ns openshift-terminal
 
 info "Waiting for namespaces to terminate ..."
 oc wait --for=delete namespace/servicemesh-keycloak namespace/seaweedfs namespace/perses-dev \
   namespace/tempostack namespace/istio-system namespace/istio-cni namespace/ztunnel \
   namespace/openshift-tempo-operator namespace/openshift-opentelemetry-operator \
-  namespace/openshift-cluster-observability-operator --timeout=300s 2>/dev/null || true
+  namespace/openshift-cluster-observability-operator namespace/openshift-terminal --timeout=300s 2>/dev/null || true
 
 # OLM keeps an Operator resource as long as components of the operator exist
 for op in $WORKSHOP_OPERATORS; do
